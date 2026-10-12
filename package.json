@@ -6,7 +6,18 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run --project unit",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:all": "vitest run",
+    "test:e2e": "playwright test",
+    "db:migrate": "tsx --conditions=react-server scripts/migrate.ts",
+    "seed": "tsx --conditions=react-server scripts/seed.ts",
+    "setup": "tsx --conditions=react-server scripts/setup.ts",
+    "stripe:setup": "tsx --conditions=react-server scripts/stripe-setup.ts",
+    "check": "npm run typecheck && npm run lint && npm run test"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
@@ -45,5 +56,8 @@
     "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.0.3"
+  },
+  "engines": {
+    "node": ">=20.9.0"
   }
 }
