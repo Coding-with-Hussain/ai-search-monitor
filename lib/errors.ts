@@ -53,6 +53,12 @@ export function isAppError(error: unknown): error is AppError {
 }
 
 /** Result type returned by server actions so the client never sees raw errors. */
-export type ActionResult<T = undefined> =
-  | ({ ok: true } & (T extends undefined ? { data?: undefined } : { data: T }))
-  | { ok: false; error: string; code?: AppErrorCode; details?: Record<string, unknown>; fieldErrors?: Record<string, string[]> };
+export type ActionResult<T = null> =
+  | { ok: true; data: T }
+  | {
+      ok: false;
+      error: string;
+      code?: AppErrorCode;
+      details?: Record<string, unknown>;
+      fieldErrors?: Record<string, string[]>;
+    };
