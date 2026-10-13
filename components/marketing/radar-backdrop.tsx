@@ -42,9 +42,9 @@ export function RadarBackdrop({
         )}
         {blips && (
           <>
-            <Blip cx={402} cy={168} />
-            <Blip cx={176} cy={392} delay="1.1s" muted />
-            <Blip cx={468} cy={356} delay="0.6s" muted />
+            {/* Near the outer rings, so they sit beside (never on top of) centered text. */}
+            <Blip cx={545} cy={380} />
+            <Blip cx={39} cy={370} delay="1.1s" muted />
           </>
         )}
       </svg>
@@ -62,10 +62,10 @@ function Blip({ cx, cy, delay = "0s", muted = false }: { cx: number; cy: number;
         r="6"
         fill={color}
         opacity="0.5"
-        className="animate-ping-soft"
+        className={cn("animate-ping-soft", muted && "max-sm:hidden")}
         style={{ transformBox: "fill-box", transformOrigin: "center", animationDelay: delay }}
       />
-      <circle cx={cx} cy={cy} r="4" fill={color} />
+      <circle cx={cx} cy={cy} r="4" fill={color} className={cn(muted && "max-sm:hidden")} />
     </g>
   );
 }

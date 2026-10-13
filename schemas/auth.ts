@@ -161,6 +161,8 @@ export function safeNextPath(value: unknown, fallback: string = DEFAULT_AFTER_LO
     const base = "http://local.invalid";
     const url = new URL(raw, base);
     if (url.origin !== base) return fallback;
+    // Dot-segment normalisation can turn `/a/../..//host` into `//host`.
+    if (url.pathname.startsWith("//") || url.pathname.includes("\\")) return fallback;
     if (NON_DESTINATIONS.some((p) => (p.endsWith("/") ? url.pathname.startsWith(p) : url.pathname === p))) return fallback;
     return `${url.pathname}${url.search}${url.hash}`;
   } catch {

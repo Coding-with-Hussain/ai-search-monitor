@@ -21,11 +21,11 @@ export function SiteHeader() {
           <Logo />
         </Link>
 
-        <NavLinks className="ml-6 hidden md:block" />
+        <NavLinks className="ml-4 hidden lg:block" />
 
         <div className="ml-auto flex items-center gap-1.5">
           <ThemeToggle />
-          <Button asChild variant="ghost" size="sm" className="hidden md:inline-flex">
+          <Button asChild variant="ghost" size="sm" className="hidden lg:inline-flex">
             <Link href="/login">Log in</Link>
           </Button>
           <Button asChild size="sm" className="hidden sm:inline-flex">

@@ -1,4 +1,4 @@
-import { ANNUAL_DISCOUNT, PLAN_IDS, PLANS, type Plan } from "@/lib/billing/plans";
+import { ANNUAL_DISCOUNT, PLAN_IDS, PLANS, type Plan, type PlanFeatures } from "@/lib/billing/plans";
 import { formatNumber } from "@/lib/format";
 import { SCORE_WEIGHTS } from "@/services/scoring";
 
@@ -16,20 +16,34 @@ export const FREQUENCY_LABELS: Record<Frequency, string> = {
   manual: "On demand",
 };
 
-/** "A", "A and B", "A, B and C". */
-export function joinNames(names: string[]) {
+/** "A", "A and B", "A, B and C" (or "A or B" with `conjunction: "or"`). */
+export function joinNames(names: string[], conjunction: "and" | "or" = "and") {
   if (names.length <= 1) return names[0] ?? "";
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return `${names.slice(0, -1).join(", ")} ${conjunction} ${names[names.length - 1]}`;
 }
 
 export function plansWithFrequency(frequency: Frequency) {
   return PLAN_IDS.filter((id) => PLANS[id].limits.monitoringFrequencies.includes(frequency)).map((id) => PLANS[id].name);
 }
 
+/** Names of the plans that include a feature, e.g. "Pro and Agency". */
+export function plansWithFeature(feature: keyof PlanFeatures) {
+  return joinNames(PLAN_IDS.filter((id) => PLANS[id].features[feature]).map((id) => PLANS[id].name));
+}
+
 /** Frequencies offered by every plan, e.g. ["weekly", "monthly", "manual"]. */
 export function frequenciesOnEveryPlan(): Frequency[] {
   const [first, ...rest] = PLAN_IDS.map((id) => PLANS[id].limits.monitoringFrequencies);
   return first.filter((f) => rest.every((list) => list.includes(f)));
+}
+
+/** e.g. "weekly or monthly on every plan, or daily on Pro and Agency". */
+export function scheduleSummary() {
+  const everyPlan = frequenciesOnEveryPlan()
+    .filter((f) => f !== "manual")
+    .map((f) => FREQUENCY_LABELS[f].toLowerCase());
+  const daily = plansWithFrequency("daily");
+  return `${joinNames(everyPlan, "or")} on every plan${daily.length ? `, or daily on ${joinNames(daily)}` : ""}`;
 }
 
 export const annualDiscountPercent = Math.round(ANNUAL_DISCOUNT * 100);

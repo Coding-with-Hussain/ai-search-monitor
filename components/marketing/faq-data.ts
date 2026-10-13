@@ -1,16 +1,7 @@
 import { PLANS, TRIAL_DAYS } from "@/lib/billing/plans";
 import { formatNumber } from "@/lib/format";
 
-import {
-  annualDiscountPercent,
-  FREQUENCY_LABELS,
-  frequenciesOnEveryPlan,
-  joinNames,
-  plansWithFrequency,
-  SCORE_DISCLAIMER,
-  SCORE_NOT_A_RANKING,
-  scoreWeightsSentence,
-} from "./plan-copy";
+import { annualDiscountPercent, SCORE_DISCLAIMER, SCORE_NOT_A_RANKING, scheduleSummary, scoreWeightsSentence } from "./plan-copy";
 
 export interface FaqItem {
   id: string;
@@ -20,10 +11,6 @@ export interface FaqItem {
   link?: { href: string; label: string };
 }
 
-const everyPlanFrequencies = frequenciesOnEveryPlan()
-  .filter((f) => f !== "manual")
-  .map((f) => FREQUENCY_LABELS[f].toLowerCase());
-const dailyPlans = plansWithFrequency("daily");
 const agency = PLANS.agency;
 
 export const LANDING_FAQ: FaqItem[] = [
@@ -31,7 +18,7 @@ export const LANDING_FAQ: FaqItem[] = [
     id: "what-is-ai-search-visibility",
     question: "What is AI search visibility?",
     answer:
-      "AI search visibility is how often, and how favorably, AI assistants such as ChatGPT, Gemini and Perplexity mention your business when people ask them for recommendations, like “best accountant for freelancers” or “where can I get my bike repaired nearby?”. Traditional rank trackers can’t see these answers. AI Search Visibility Monitor asks those questions on your behalf and records what the answers say.",
+      "AI search visibility is how often, and how favorably, AI assistants like ChatGPT, Gemini and Perplexity mention your business when people ask them for recommendations, such as “best accountant for freelancers” or “where can I get my bike repaired nearby”. Traditional rank trackers can’t see these answers. AI Search Visibility Monitor asks those questions on your behalf and records what the answers say.",
   },
   {
     id: "which-platforms",
@@ -53,9 +40,7 @@ export const LANDING_FAQ: FaqItem[] = [
   {
     id: "monitoring-frequency",
     question: "How often does monitoring run?",
-    answer: `You choose the schedule for each project: ${joinNames(everyPlanFrequencies)} on every plan${
-      dailyPlans.length ? `, or daily on ${joinNames(dailyPlans)}` : ""
-    }. You can also run a scan manually at any time within your plan’s monthly query allowance.`,
+    answer: `You choose the schedule for each project: ${scheduleSummary()}. You can also run a scan manually at any time within your plan’s monthly query allowance.`,
   },
   {
     id: "free-trial",

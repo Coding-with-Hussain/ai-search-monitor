@@ -69,10 +69,10 @@ export async function clientIpHash(): Promise<string> {
  */
 export async function enforceAuthRateLimit(operation: string, email?: string) {
   const { limit, windowSeconds } = RATE_LIMITS.authAttempt;
-  const message = "Too many attempts. Please wait a few minutes and try again.";
-  await enforceRateLimit(`auth:${operation}:ip:${await clientIpHash()}`, limit, windowSeconds, message);
+  // The default message tells the user roughly how long to wait.
+  await enforceRateLimit(`auth:${operation}:ip:${await clientIpHash()}`, limit, windowSeconds);
   if (email) {
-    await enforceRateLimit(`auth:${operation}:email:${sha256(`aivm:auth-email:${email}`)}`, limit, windowSeconds, message);
+    await enforceRateLimit(`auth:${operation}:email:${sha256(`aivm:auth-email:${email}`)}`, limit, windowSeconds);
   }
 }
 
@@ -103,6 +103,9 @@ function authFailure(code: AppError["code"], message: string, status: number, re
   return new AppError(code, message, status, { reason });
 }
 
+/** Operations whose main job is sending an email (affects failure wording). */
+const EMAIL_OPERATIONS = new Set(["magic_link", "resend_confirmation", "password_recovery", "signup"]);
+
 /**
  * Translate a Supabase Auth error into a friendly, typed AppError. Raw
  * provider messages are never shown to users (they are logged instead).
@@ -130,8 +133,15 @@ export function toFriendlyAuthError(error: unknown, operation: string): AppError
   if (isAuthSessionMissingError(authError) || code === "session_not_found" || code === "session_expired") {
     return authFailure("UNAUTHORIZED", "Your session has expired. Please request a new link and try again.", 401, "session_missing");
   }
-  if (isAuthRetryableFetchError(authError)) {
-    return authFailure("NOT_CONFIGURED", "We couldn't reach the sign-in service. Please try again in a moment.", 503, "unavailable");
+  if (isAuthRetryableFetchError(authError) || (authError.status ?? 0) >= 500) {
+    return authFailure(
+      "NOT_CONFIGURED",
+      EMAIL_OPERATIONS.has(operation)
+        ? "We couldn't send the email right now. Please try again in a few minutes."
+        : "We couldn't reach the sign-in service. Please try again in a moment.",
+      503,
+      "unavailable",
+    );
   }
 
   switch (code) {
