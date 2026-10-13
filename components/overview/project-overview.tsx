@@ -13,20 +13,23 @@ import { VisibilitySection } from "./visibility-section";
  * The project dashboard body, shared by /projects/[id] and the public /demo.
  * Purely presentational: every value comes from `data` (plain JSON), so the
  * same component renders real monitoring results and the in-memory demo.
+ *
+ * Sections run top to bottom in the same order as the product tour: score,
+ * platforms, competitors, recommendations, history.
  */
 export function ProjectOverview({ data }: { data: ProjectOverviewData }) {
   return (
-    <div className="flex flex-col gap-4 sm:gap-6">
+    <div className="flex min-w-0 flex-col gap-4 sm:gap-6">
       <PartialScanAlert metrics={data.metrics} reasons={data.unavailableReasons} />
       <ScoreHero data={data} />
       <MetricGrid data={data} />
       <PlatformCards data={data} />
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
-        <VisibilitySection data={data} />
+        <CompetitorSection data={data} />
         <RecommendationsPreview data={data} />
       </div>
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
-        <CompetitorSection data={data} />
+        <VisibilitySection data={data} />
         <ShareOfVoiceSection data={data} />
       </div>
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">

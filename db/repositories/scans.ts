@@ -5,7 +5,7 @@ import { notFound } from "@/lib/errors";
 import type { ProviderMetrics } from "@/types/domain";
 
 import { db } from "../index";
-import { scans } from "../schema";
+import { type Project, scans } from "../schema";
 import type { AuthorizedProject } from "./projects";
 
 const uuid = z.uuid();
@@ -157,3 +157,41 @@ export async function getScanProgress(project: AuthorizedProject, scanId: string
 }
 
 export type ScanSummary = Awaited<ReturnType<typeof listScans>>[number];
+
+export interface ProjectScanMeta {
+  /** Mode of the scan behind `latestScore` (null when there is none). */
+  latestMode: "live" | "mock" | null;
+  /** A scan is queued or running right now. */
+  scanning: boolean;
+}
+
+/**
+ * Latest-scan mode and "scanning now" flags for a list of projects.
+ * Only pass projects already returned by listProjectsForUser(user.id).
+ */
+export async function getProjectScanMeta(projects: Project[]): Promise<Map<string, ProjectScanMeta>> {
+  const meta = new Map<string, ProjectScanMeta>();
+  if (projects.length === 0) return meta;
+  const projectIds = projects.map((p) => p.id);
+  const latestIds = projects.map((p) => p.latestScanId).filter((id): id is string => Boolean(id));
+
+  const [latest, active] = await Promise.all([
+    latestIds.length
+      ? db()
+          .select({ projectId: scans.projectId, mode: scans.mode })
+          .from(scans)
+          .where(and(inArray(scans.id, latestIds), inArray(scans.projectId, projectIds)))
+      : Promise.resolve([] as Array<{ projectId: string; mode: "live" | "mock" }>),
+    db()
+      .selectDistinct({ projectId: scans.projectId })
+      .from(scans)
+      .where(and(inArray(scans.projectId, projectIds), inArray(scans.status, ["queued", "running"]))),
+  ]);
+
+  const modes = new Map(latest.map((row) => [row.projectId, row.mode]));
+  const scanning = new Set(active.map((row) => row.projectId));
+  for (const p of projects) {
+    meta.set(p.id, { latestMode: modes.get(p.id) ?? null, scanning: scanning.has(p.id) });
+  }
+  return meta;
+}

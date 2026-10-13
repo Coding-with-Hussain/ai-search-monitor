@@ -20,6 +20,7 @@ import { countActiveQueries } from "@/db/repositories/queries";
 import { getLatestCompletedScan, getMostRecentScan, getPreviousCompletedScan, getScoreHistory } from "@/db/repositories/scans";
 import { recommendations } from "@/db/schema";
 import { requireUser } from "@/lib/auth/session";
+import { getEntitlements } from "@/lib/billing/entitlements";
 import { isAppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { providerStatuses } from "@/services/ai/providers/registry";
@@ -28,6 +29,13 @@ import { PROVIDER_IDS, type ProviderId, type ScanMetrics } from "@/types/domain"
 export const metadata: Metadata = { title: "Overview" };
 
 const PREVIEW_LIMIT = 3;
+/** Upper bound on chart points (daily monitoring for a few months). */
+const HISTORY_LIMIT = 180;
+const DAY_MS = 86_400_000;
+
+function historySince(days: number | null) {
+  return days === null ? null : new Date(Date.now() - days * DAY_MS);
+}
 
 /** Top open recommendations: high > medium > low, then most recently updated. */
 async function getRecommendationPreview(project: AuthorizedProject): Promise<{ items: RecommendationPreviewItem[]; total: number }> {
@@ -81,12 +89,13 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
     throw error;
   });
 
-  const [latest, mostRecent, competitors, activeQueries, profile] = await Promise.all([
+  const [latest, mostRecent, competitors, activeQueries, profile, entitlements] = await Promise.all([
     getLatestCompletedScan(project),
     getMostRecentScan(project),
     listCompetitors(project),
     countActiveQueries(project),
     getProfile(user.id),
+    getEntitlements(user.id),
   ]);
 
   // The latest attempt matters only when it is newer than the results shown.
@@ -140,13 +149,16 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
     );
   }
 
+  // The chart respects the plan's history window (null = unlimited).
+  const historyDays = entitlements.plan.limits.historyDays;
+
   // Secondary data degrades gracefully: a failure here should not hide the score.
   const [previousScan, history, recommendationPreview] = await Promise.all([
     getPreviousCompletedScan(project, latest.createdAt).catch((error) => {
       logger.warn("overview.previous_failed", { projectId: project.id, error: (error as Error).message });
       return null;
     }),
-    getScoreHistory(project, { limit: 120 }).catch((error) => {
+    getScoreHistory(project, { since: historySince(historyDays), limit: HISTORY_LIMIT }).catch((error) => {
       logger.warn("overview.history_failed", { projectId: project.id, error: (error as Error).message });
       return null;
     }),
@@ -173,6 +185,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
     scannedAt: lastCompletedAt ?? latest.createdAt.toISOString(),
     history: points,
     historyIncludesSimulation: (history ?? []).some((h) => h.mode === "mock"),
+    historyDays,
     monitoredProviders: project.providers.filter(isProviderId),
     competitorOrder: competitors.map((c) => c.id),
     recommendations: recommendationPreview?.items ?? null,

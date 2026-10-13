@@ -61,16 +61,21 @@ export function OverviewSkeleton() {
       </div>
 
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
-        <Card className="p-5 lg:col-span-2">
-          <Skeleton className="mb-4 h-4 w-40" />
-          <VisibilityChartSkeleton />
-        </Card>
+        <CardSkeleton rows={4} className="lg:col-span-2" />
         <CardSkeleton rows={3} />
       </div>
 
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
-        <CardSkeleton rows={4} className="lg:col-span-2" />
+        <Card className="p-5 lg:col-span-2">
+          <Skeleton className="mb-4 h-4 w-40" />
+          <VisibilityChartSkeleton />
+        </Card>
         <CardSkeleton rows={4} />
+      </div>
+
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
+        <CardSkeleton rows={5} className="lg:col-span-2" />
+        <CardSkeleton rows={5} />
       </div>
       <span className="sr-only">Loading your AI visibility overview…</span>
     </div>

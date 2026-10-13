@@ -73,7 +73,7 @@ async function main() {
   console.log(`Seeding demo data into ${describeDatabase(dbUrl)}`);
 
   const { db } = await import("@/db");
-  const { projects, scans, subscriptions } = await import("@/db/schema");
+  const { projects, scans, subscriptions, usageRecords } = await import("@/db/schema");
   const { ensureUserRecords, updateProfile } = await import("@/db/repositories/profiles");
   const { createProjectWithSetup } = await import("@/services/projects/service");
   const { createScan, runScanToCompletion } = await import("@/services/scans/pipeline");
@@ -97,7 +97,10 @@ async function main() {
       console.log(`\nSign in with ${DEMO.email} / ${DEMO.password}`);
       process.exit(0);
     }
-    for (const p of existing) await db().delete(projects).where(eq(projects.id, p.id));
+    for (const p of existing) {
+      await db().delete(usageRecords).where(eq(usageRecords.projectId, p.id));
+      await db().delete(projects).where(eq(projects.id, p.id));
+    }
     console.log("• Removed previous demo project");
   }
 

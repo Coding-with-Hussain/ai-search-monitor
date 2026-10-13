@@ -79,8 +79,7 @@ export function StepMonitoring({ config, onEditStep }: { config: WizardConfig; o
                   <Label htmlFor="ob-query-count">Number of questions</Label>
                   <Input
                     id="ob-query-count"
-                    // `Input` forwards `ref` (React 19 ref-as-prop); spread like `register()` does.
-                    {...{ ref: field.ref }}
+                    ref={field.ref}
                     type="number"
                     inputMode="numeric"
                     min={MIN_QUERY_COUNT}

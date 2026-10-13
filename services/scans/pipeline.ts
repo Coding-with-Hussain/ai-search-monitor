@@ -172,15 +172,18 @@ export async function createScan(opts: CreateScanOptions): Promise<Scan> {
       await tx.insert(aiRuns).values(runRows.slice(i, i + 500));
     }
 
-    await tx.insert(usageRecords).values({
-      userId: project.userId,
-      projectId: project.id,
-      scanId: created.id,
-      kind: "query_run",
-      quantity: activeQueries.length,
-      metadata: { trigger, mode, providers },
-      createdAt,
-    });
+    // Seeded demo history is not real usage and never counts against quotas.
+    if (trigger !== "seed") {
+      await tx.insert(usageRecords).values({
+        userId: project.userId,
+        projectId: project.id,
+        scanId: created.id,
+        kind: "query_run",
+        quantity: activeQueries.length,
+        metadata: { trigger, mode, providers },
+        createdAt,
+      });
+    }
     return created;
   });
 
@@ -585,7 +588,7 @@ export async function finalizeScan(scanId: string) {
       cur.cost += Number(r.estimatedCostUsd ?? 0);
       costByProvider.set(r.provider, cur);
     }
-    for (const [provider, v] of costByProvider) {
+    for (const [provider, v] of scan.trigger === "seed" ? [] : costByProvider) {
       await tx.insert(usageRecords).values({
         userId: project.userId,
         projectId: project.id,

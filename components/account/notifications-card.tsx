@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-import type { RecentNotification } from "./account-data";
+import type { RecentNotification } from "@/db/repositories/notifications";
 import { RetryButton } from "./retry-button";
 
 const SEVERITY = {

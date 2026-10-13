@@ -1,7 +1,7 @@
 import { FolderKanban } from "lucide-react";
 import type { Metadata } from "next";
 
-import { getProjectScanMeta, type ProjectScanMeta } from "@/components/account/account-data";
+import { getProjectScanMeta, type ProjectScanMeta } from "@/db/repositories/scans";
 import { CreateProjectButton } from "@/components/account/create-project-button";
 import { ProjectCard } from "@/components/account/project-card";
 import { ScoreFootnote } from "@/components/account/score-footnote";

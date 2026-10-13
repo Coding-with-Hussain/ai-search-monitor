@@ -1,7 +1,6 @@
 import { Plus, Swords } from "lucide-react";
 import Link from "next/link";
 
-import { SimulationBadge } from "@/components/app/simulation-badge";
 import { Delta } from "@/components/dashboard/delta";
 import { ScoreRing } from "@/components/dashboard/score-ring";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +13,7 @@ import { scoreBand, scoreChange } from "@/services/scoring";
 import { CompetitorGapDialog } from "./competitor-gap-dialog";
 import { coverage, formatSignedPoints, gapSentence, METRIC_DISCLAIMER, overviewLinks, TRUST_NOTE } from "./helpers";
 import { ScoreExplainer } from "./score-explainer";
+import { DataSourceBadges } from "./simulation-label";
 import { TOUR_TARGETS, type ProjectOverviewData } from "./types";
 
 const BAND_COPY = {
@@ -43,8 +43,7 @@ export function ScoreHero({ data }: { data: ProjectOverviewData }) {
               AI Visibility Score
             </h2>
             <Badge variant={band.tone}>{band.label}</Badge>
-            {data.isDemoData && <Badge variant="demo">Demo data</Badge>}
-            {data.isSimulation && <SimulationBadge />}
+            <DataSourceBadges data={data} />
           </div>
           <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <span className="text-3xl font-semibold tracking-tight tabular">

@@ -10,7 +10,7 @@ import type { Project } from "@/db/schema";
 import { formatDate, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-import type { ProjectScanMeta } from "./account-data";
+import type { ProjectScanMeta } from "@/db/repositories/scans";
 import { isPast, monitoringLabel, projectLocation } from "./labels";
 
 function Stat({ label, children }: { label: string; children: React.ReactNode }) {

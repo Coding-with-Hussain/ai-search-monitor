@@ -82,7 +82,11 @@ export function MetricGrid({ data }: { data: ProjectOverviewData }) {
           deltaSuffix=" pts"
           footnote={
             gap ? (
-              <span className="text-xs text-subtle-foreground">Strongest competitor changed since the previous scan.</span>
+              <span className="text-xs text-subtle-foreground">
+                {prevGap
+                  ? `Previous scan compared against ${prevGap.competitorName}.`
+                  : "No competitor comparison in the previous scan."}
+              </span>
             ) : (
               <span className="text-xs text-subtle-foreground">
                 {data.competitorOrder.length > 0 ? "Run a new scan to measure the gap." : "Add competitors to measure the gap."}

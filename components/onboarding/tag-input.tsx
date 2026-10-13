@@ -128,8 +128,7 @@ export function TagInput({
       <div className="flex gap-2">
         <Input
           id={id}
-          // `Input` forwards `ref` (React 19 ref-as-prop); spread like `register()` does.
-          {...{ ref: inputRef }}
+          ref={inputRef}
           value={draft}
           onChange={handleChange}
           onKeyDown={handleKeyDown}

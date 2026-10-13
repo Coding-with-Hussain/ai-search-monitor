@@ -1,7 +1,6 @@
 import { ArrowRight, CircleOff, PlugZap } from "lucide-react";
 import Link from "next/link";
 
-import { SimulationBadge } from "@/components/app/simulation-badge";
 import { Delta } from "@/components/dashboard/delta";
 import { InfoTip } from "@/components/dashboard/info-tip";
 import { Card } from "@/components/ui/card";
@@ -10,6 +9,7 @@ import { PROVIDER_META } from "@/lib/providers-meta";
 import { PROVIDER_IDS, type ProviderId, type ProviderMetrics } from "@/types/domain";
 
 import { diff, overviewLinks } from "./helpers";
+import { SimulationLabel } from "./simulation-label";
 import { TOUR_TARGETS, type ProjectOverviewData } from "./types";
 
 /** Visibility per AI platform (ChatGPT, Gemini, Perplexity). */
@@ -24,7 +24,7 @@ export function PlatformCards({ data }: { data: ProjectOverviewData }) {
         <InfoTip label="About AI platform visibility">
           Your AI Visibility score calculated separately for each AI assistant, from the same monitored questions.
         </InfoTip>
-        {data.isSimulation && <SimulationBadge className="ml-auto" />}
+        {data.isSimulation && <SimulationLabel mode={data.mode} className="ml-auto" />}
       </div>
       <ul className="grid gap-3 sm:gap-4 md:grid-cols-3">
         {PROVIDER_IDS.map((id) => {

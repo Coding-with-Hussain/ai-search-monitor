@@ -30,6 +30,8 @@ export interface ProjectOverviewData {
   history: VisibilityPoint[];
   /** True when any history point came from a simulated scan. */
   historyIncludesSimulation: boolean;
+  /** Days of history included by the plan (null = unlimited / not applicable). */
+  historyDays: number | null;
   /** Platforms configured for monitoring (the latest scan may include fewer). */
   monitoredProviders: ProviderId[];
   /** Competitor ids in tracking order (stable chart colors). */

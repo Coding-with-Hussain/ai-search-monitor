@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { getProjectScanMeta, listRecentNotifications, type ProjectScanMeta } from "@/components/account/account-data";
+import { listRecentNotifications } from "@/db/repositories/notifications";
+import { getProjectScanMeta, type ProjectScanMeta } from "@/db/repositories/scans";
 import { CreateProjectButton } from "@/components/account/create-project-button";
 import { NotificationsCard } from "@/components/account/notifications-card";
 import { ProjectCard } from "@/components/account/project-card";
