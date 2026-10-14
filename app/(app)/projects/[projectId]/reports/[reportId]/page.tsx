@@ -9,6 +9,7 @@ import { DeleteReportButton } from "@/components/reports/delete-report-button";
 import { PrintLightMode } from "@/components/reports/print-light-mode";
 import { PrintReportButton } from "@/components/reports/print-report-button";
 import { ReportDocument } from "@/components/reports/report-document";
+import { ReportPrintStyles } from "@/components/reports/report-print-styles";
 import { Alert } from "@/components/ui/alert";
 import { getProjectForUser } from "@/db/repositories/projects";
 import { getReport } from "@/db/repositories/reports";
@@ -113,6 +114,7 @@ export default async function ReportPage({ params }: { params: Params }) {
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
       <PrintLightMode />
+      <ReportPrintStyles />
       <div className="no-print flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="pt-1.5">{backLink}</div>
         <div className="flex flex-wrap items-start gap-2">

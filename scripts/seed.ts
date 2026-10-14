@@ -73,10 +73,9 @@ async function main() {
   console.log(`Seeding demo data into ${describeDatabase(dbUrl)}`);
 
   const { db } = await import("@/db");
-  const { projects, scans, subscriptions, usageRecords } = await import("@/db/schema");
+  const { projects, subscriptions, usageRecords } = await import("@/db/schema");
   const { ensureUserRecords, updateProfile } = await import("@/db/repositories/profiles");
-  const { createProjectWithSetup } = await import("@/services/projects/service");
-  const { createScan, runScanToCompletion } = await import("@/services/scans/pipeline");
+  const { seedDemoProject } = await import("@/services/demo/seed");
 
   const userId = await ensureDemoUser();
   await ensureUserRecords({ id: userId, email: DEMO.email, fullName: DEMO.name });
@@ -104,49 +103,12 @@ async function main() {
     console.log("• Removed previous demo project");
   }
 
-  const project = await createProjectWithSetup(
+  const project = await seedDemoProject({
     userId,
-    {
-      name: "ABC Dental",
-      website: "https://abcdental.com",
-      industry: "Dental Clinic",
-      businessType: "local",
-      country: "Pakistan",
-      city: "Lahore",
-      description: "Family and cosmetic dental clinic in Lahore.",
-      services: ["Dental implants", "Braces", "Teeth whitening", "Root canal", "Dental checkups"],
-      competitors: [
-        { name: "XYZ Dental", website: "https://xyzdental.com" },
-        { name: "Smile Clinic", website: "https://smileclinic.pk" },
-        { name: "Dental Care Lahore", website: "https://dentalcarelahore.com" },
-      ],
-      monitoring: { generateQueries: true, frequency: "weekly", queryCount: 40, providers: ["chatgpt", "gemini", "perplexity"] },
-      runFirstScan: false,
-    },
-    { isDemo: true, skipEntitlements: true },
-  );
+    weeks: HISTORY_WEEKS,
+    onScan: ({ date, score, status }) => console.log(`• Scan ${date.toISOString().slice(0, 10)} → score ${score} (${status})`),
+  });
   console.log(`• Created demo project ${project.name} (${project.id})`);
-
-  // Weekly history with gradually improving visibility (simulation strength).
-  const now = Date.now();
-  for (let i = HISTORY_WEEKS - 1; i >= 0; i--) {
-    const progress = (HISTORY_WEEKS - 1 - i) / (HISTORY_WEEKS - 1);
-    const strength = 0.4 + progress * 0.24 + (i % 3 === 0 ? -0.02 : 0.01);
-    const createdAt = new Date(now - i * 7 * 86_400_000 - 3_600_000);
-    const fresh = (await db().select().from(projects).where(eq(projects.id, project.id)))[0] as typeof project;
-    const scan = await createScan({
-      project: fresh,
-      userId,
-      trigger: "seed",
-      mode: "mock",
-      mockStrength: Math.round(strength * 100) / 100,
-      skipEntitlements: true,
-      createdAt,
-    });
-    await runScanToCompletion(scan.id);
-    const [done] = await db().select().from(scans).where(eq(scans.id, scan.id));
-    console.log(`• Scan ${createdAt.toISOString().slice(0, 10)} → score ${done.score} (${done.status})`);
-  }
 
   await updateProfile(userId, { onboardingCompletedAt: new Date() });
   console.log(`\n✓ Demo data ready. Sign in with ${DEMO.email} / ${DEMO.password}`);
