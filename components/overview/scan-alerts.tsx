@@ -13,6 +13,14 @@ export interface LatestAttempt {
 
 const FAILED_PREFIX = /^your scan failed:\s*/i;
 
+/** "no provider configured" → "No provider configured." */
+function sentence(text: string) {
+  const t = text.trim();
+  if (!t) return "";
+  const capitalized = t.charAt(0).toUpperCase() + t.slice(1);
+  return /[.!?]$/.test(capitalized) ? capitalized : `${capitalized}.`;
+}
+
 /**
  * Alerts about the most recent scan attempt when it is newer than the results
  * shown (running, failed or cancelled). Retrying uses the Run scan button in
@@ -30,10 +38,10 @@ export function ScanAttemptAlert({ attempt, lastCompletedAt }: { attempt: Latest
     );
   }
   if (attempt.status === "failed") {
-    const reason = attempt.error?.replace(FAILED_PREFIX, "").trim();
+    const reason = sentence(attempt.error?.replace(FAILED_PREFIX, "") ?? "");
     return (
       <Alert variant="danger" title="Your scan failed">
-        {reason ? `${reason.endsWith(".") ? reason : `${reason}.`} ` : ""}
+        {reason ? `${reason} ` : ""}
         The attempt on {formatDateTime(attempt.createdAt)} did not produce results. Use the Run scan button above to try
         again.{showing}
       </Alert>

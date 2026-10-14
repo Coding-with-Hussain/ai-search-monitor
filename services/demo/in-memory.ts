@@ -43,9 +43,13 @@ export const DEMO_PROVIDERS: ProviderId[] = ["chatgpt", "gemini", "perplexity"];
 const QUERY_COUNT = 40;
 const DAY_MS = 86_400_000;
 /**
- * Simulated visibility bias per weekly scan: gradual improvement with small
- * dips. Tuned so the latest scan tells a realistic story (improving, but still
- * behind the strongest competitor, with open recommendations).
+ * Simulated visibility bias (mockStrength) per weekly scan: gradual
+ * improvement with small dips. The mock provider adds per-platform bias and
+ * per-answer noise on top, so these inputs take the overall score from about
+ * 26 to 46: improving, but still about 9 points behind the strongest
+ * competitor, with open recommendations — a realistic story for the demo.
+ * (Inputs around 0.40 → 0.64 would put the sample business far ahead of every
+ * competitor, which leaves nothing to explain on the competitor views.)
  */
 const STRENGTHS = [0.3, 0.33, 0.32, 0.36, 0.39, 0.42, 0.42, 0.47];
 const SCAN_COUNT = STRENGTHS.length;

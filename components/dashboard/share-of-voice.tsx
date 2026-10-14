@@ -9,8 +9,18 @@ const COMPETITOR_COLORS = ["var(--series-2)", "var(--series-3)", "var(--series-4
  * Part-to-whole bar of AI recommendations. Colors follow the entity (your
  * business is always slot 1; competitors keep their slot by tracking order).
  * The legend lists every value, so color never carries meaning alone.
+ * `businessLabel` names your business in the legend (e.g. "ABC Dental (you)").
  */
-export function ShareOfVoice({ slices, competitorOrder }: { slices: ShareOfVoiceSlice[]; competitorOrder: string[] }) {
+export function ShareOfVoice({
+  slices,
+  competitorOrder,
+  businessLabel = "Your business",
+}: {
+  slices: ShareOfVoiceSlice[];
+  competitorOrder: string[];
+  /** Legend label for your business (defaults to "Your business"). */
+  businessLabel?: string;
+}) {
   const business = slices.find((s) => s.kind === "business");
   const competitors = slices.filter((s) => s.kind === "competitor");
   const others = slices.find((s) => s.kind === "others");
@@ -25,7 +35,7 @@ export function ShareOfVoice({ slices, competitorOrder }: { slices: ShareOfVoice
   const othersMentions = (others?.mentions ?? 0) + folded.reduce((s, c) => s + c.mentions, 0);
 
   const rows = [
-    ...(business ? [{ key: "business", name: "Your business", share: business.share, mentions: business.mentions, color: "var(--series-1)" }] : []),
+    ...(business ? [{ key: "business", name: businessLabel, share: business.share, mentions: business.mentions, color: "var(--series-1)" }] : []),
     ...named
       .sort((a, b) => b.share - a.share)
       .map((c) => ({ key: c.key, name: c.name, share: c.share, mentions: c.mentions, color: colorFor.get(c.key)! })),

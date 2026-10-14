@@ -35,7 +35,7 @@ export function ScoreHero({ data }: { data: ProjectOverviewData }) {
     <Card className="grid scroll-mt-24 overflow-hidden lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]" data-tour={TOUR_TARGETS.score}>
       <section aria-labelledby="ai-visibility-heading" className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:gap-7 sm:p-6">
         <div className="flex justify-center sm:block">
-          <ScoreRing value={score} size={152} stroke={11} />
+          <ScoreRing value={score} size={152} stroke={11} showLabel={false} label="AI Visibility Score" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -45,24 +45,21 @@ export function ScoreHero({ data }: { data: ProjectOverviewData }) {
             <Badge variant={band.tone}>{band.label}</Badge>
             <DataSourceBadges data={data} />
           </div>
-          <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <span className="text-3xl font-semibold tracking-tight tabular">
-              {Math.round(score)}
-              <span className="text-base font-normal text-muted-foreground">/100</span>
-            </span>
+          <p className="mt-2.5">
             {change ? (
               change.percent !== null ? (
-                <Delta value={change.percent} suffix="%" context="vs previous period" className="text-[13px]" />
+                <Delta value={change.percent} suffix="%" context="vs previous period" className="text-sm [&_svg]:size-4" />
               ) : (
-                <Delta value={change.points} suffix=" pts" context="vs previous period" className="text-[13px]" />
+                <Delta value={change.points} suffix=" pts" context="vs previous period" className="text-sm [&_svg]:size-4" />
               )
             ) : (
-              <span className="text-[13px] text-subtle-foreground">First completed scan, no previous period yet</span>
+              <span className="text-sm text-subtle-foreground">First completed scan, no previous period yet</span>
             )}
           </p>
           {change && change.percent !== null && (
             <p className="mt-0.5 text-xs text-subtle-foreground tabular">
-              {formatSignedPoints(change.points)} points since the previous scan
+              {formatSignedPoints(change.points)} {Math.abs(Math.round(change.points)) === 1 ? "point" : "points"} since
+              the previous scan
             </p>
           )}
           <p className="mt-3 text-[13px] text-muted-foreground">{cov.text}</p>

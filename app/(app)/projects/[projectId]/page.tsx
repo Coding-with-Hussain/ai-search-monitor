@@ -59,6 +59,16 @@ async function getRecommendationPreview(project: AuthorizedProject): Promise<{ i
   return { items: rows, total: totals[0]?.value ?? 0 };
 }
 
+/**
+ * Stable color order: tracked competitors first (in tracking order), then any
+ * competitor that is in this scan's results but has since been removed.
+ */
+function competitorOrder(tracked: Array<{ id: string }>, metrics: ScanMetrics): string[] {
+  const order = tracked.map((c) => c.id);
+  for (const c of metrics.competitors) if (!order.includes(c.competitorId)) order.push(c.competitorId);
+  return order;
+}
+
 function isProviderId(value: string): value is ProviderId {
   return (PROVIDER_IDS as readonly string[]).includes(value);
 }
@@ -122,7 +132,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
                 : `Use the Run scan button above to ask AI assistants your ${activeQueries} monitored ${activeQueries === 1 ? "question" : "questions"} and see whether they mention and recommend ${project.name}.`
           }
           action={
-            activeQueries === 0 ? (
+            !running && activeQueries === 0 ? (
               <Button asChild>
                 <Link href={`/projects/${project.id}/queries`}>
                   <ListPlus aria-hidden="true" />
@@ -187,7 +197,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
     historyIncludesSimulation: (history ?? []).some((h) => h.mode === "mock"),
     historyDays,
     monitoredProviders: project.providers.filter(isProviderId),
-    competitorOrder: competitors.map((c) => c.id),
+    competitorOrder: competitorOrder(competitors, metrics),
     recommendations: recommendationPreview?.items ?? null,
     recommendationCount: recommendationPreview?.total ?? 0,
     isSimulation: latest.mode === "mock",

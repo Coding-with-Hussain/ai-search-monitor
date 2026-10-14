@@ -121,14 +121,18 @@ function CompactCompetitorList({ entities }: { entities: ComparisonEntity[] }) {
   );
 }
 
-/** Part-to-whole of recommendations across all businesses. */
+/** Part-to-whole of recommendations across all businesses (you are always slot 1). */
 export function ShareOfVoiceSection({ data }: { data: ProjectOverviewData }) {
   return (
     <SectionCard
       title="Share of voice"
       description="Percentage of monitored AI recommendations mentioning each business."
     >
-      <ShareOfVoice slices={data.metrics.shareOfVoice} competitorOrder={data.competitorOrder} />
+      <ShareOfVoice
+        slices={data.metrics.shareOfVoice}
+        competitorOrder={data.competitorOrder}
+        businessLabel={`${data.businessName} (you)`}
+      />
       <p className="mt-4 text-xs text-subtle-foreground">
         “Others” are businesses AI assistants recommended that you don&apos;t track as competitors.
       </p>
