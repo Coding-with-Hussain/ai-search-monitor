@@ -71,9 +71,9 @@ export function TrendChart({ points, label }: { points: Array<{ date: string; sc
               />
             )}
           </svg>
-          {xy.map((p) => (
+          {xy.map((p, i) => (
             <span
-              key={p.date}
+              key={`${p.date}-${i}`}
               title={`${formatDate(p.date)}: ${Math.round(p.score)}`}
               className="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-[var(--chart-surface)]"
               style={{ left: `${p.x}%`, top: `${p.y}%`, background: "var(--series-1)" }}

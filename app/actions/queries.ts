@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 
 import { type AuthorizedProject, getProjectForUser } from "@/db/repositories/projects";
@@ -156,7 +157,8 @@ export async function generateQueriesAction(input: z.input<typeof generateInput>
     }
 
     const added = await regenerateQueries(project, data.count);
-    await track("query_generated", user.id, { projectId: project.id, requested: data.count, count: added, source: "questions_page" });
+    // Analytics must never delay or fail the response.
+    after(() => track("query_generated", user.id, { projectId: project.id, requested: data.count, count: added, source: "questions_page" }));
     if (added > 0) revalidateProject(project.id);
     return { added, requested: data.count };
   }, "queries.generate");

@@ -49,7 +49,7 @@ export function QueryScoreHistory({
                 aria-current={current ? "page" : undefined}
                 scroll={false}
                 className={cn(
-                  "grid grid-cols-[4.5rem_minmax(0,1fr)_2.25rem] items-center gap-3 rounded-md px-2 py-1.5 text-[13px] transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:grid-cols-[5.5rem_minmax(0,1fr)_2.25rem_10rem]",
+                  "grid grid-cols-[4.5rem_minmax(0,1fr)_2.25rem] items-center gap-3 rounded-md px-2 py-1.5 text-[13px] transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:grid-cols-[5.5rem_minmax(0,1fr)_2.25rem_minmax(0,12.5rem)]",
                   current && "bg-primary-soft/60 hover:bg-primary-soft/60",
                 )}
               >
@@ -67,7 +67,7 @@ export function QueryScoreHistory({
                   {score ?? "—"}
                   <span className="sr-only"> out of 100</span>
                 </span>
-                <span className="hidden text-xs text-muted-foreground tabular sm:block">
+                <span className="hidden truncate text-xs text-muted-foreground tabular sm:block">
                   {e.analyzed === 0
                     ? "No analyzed answers"
                     : `Recommended by ${e.recommendedIn}/${e.analyzed}${e.bestPosition ? ` · best #${e.bestPosition}` : ""}`}

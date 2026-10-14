@@ -23,7 +23,7 @@ export function MetricTiles({
     previous === undefined ? undefined : previous === null ? null : scoreDiff(current, before ?? null);
   const none = <span className="text-xs text-subtle-foreground">Not enough data</span>;
   return (
-    <div className={cn("grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5", className)}>
+    <div className={cn("grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5", className)}>
       <MetricCard
         label="Recommendation rate"
         value={has ? formatPercent(overall.recommendationRate) : "—"}

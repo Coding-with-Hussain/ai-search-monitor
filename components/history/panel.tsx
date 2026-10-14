@@ -11,6 +11,7 @@ export function Panel({
   actions,
   className,
   bodyClassName,
+  avoidBreak = true,
   children,
 }: {
   title: React.ReactNode;
@@ -18,13 +19,16 @@ export function Panel({
   actions?: React.ReactNode;
   className?: string;
   bodyClassName?: string;
+  /** Keep the whole card on one printed page (turn off for long lists). */
+  avoidBreak?: boolean;
   children: React.ReactNode;
 }) {
   const headingId = useId();
   return (
-    <Card className={cn("print-avoid-break flex min-w-0 flex-col", className)}>
-      <section aria-labelledby={headingId} className="flex flex-1 flex-col">
-        <div className="flex flex-col gap-3 p-5 pb-4 sm:flex-row sm:items-start sm:justify-between">
+    <Card className={cn("flex min-w-0 flex-col print:block", avoidBreak && "print-avoid-break", className)}>
+      {/* Block layout in print: Chrome can overlap fragmented column flexboxes across pages. */}
+      <section aria-labelledby={headingId} className="flex flex-1 flex-col print:block">
+        <div className="flex flex-col gap-3 p-5 pb-4 break-after-avoid sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <h3 id={headingId} className="text-[15px] leading-snug font-semibold tracking-tight">
               {title}

@@ -253,7 +253,7 @@ export function explainQuestion(input: { businessName: string; hasWebsite: boole
 
   const negative = analyzed.filter((r) => r.analysis.mentioned && r.analysis.sentiment === "negative");
   if (negative.length > 0) {
-    points.push({ tone: "negative", text: `${listJoin(negative.map(pn))} described you in a negative tone. Check the evidence below.` });
+    points.push({ tone: "negative", text: `${listJoin(negative.map(pn))} described you in a negative tone. See the evidence in the platform cards above.` });
   }
 
   return { summary, points, hasGap: recommended.length < analyzed.length || rivalList.length > 0 };

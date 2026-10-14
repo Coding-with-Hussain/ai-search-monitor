@@ -113,7 +113,7 @@ export function TrackedCompetitors({
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       {c.domain ? (
                         <a
-                          href={c.website ?? `https://${c.domain}`}
+                          href={c.website && /^https?:\/\//i.test(c.website) ? c.website : `https://${c.domain}`}
                           target="_blank"
                           rel="noopener noreferrer nofollow"
                           className="inline-flex items-center gap-1 hover:text-foreground hover:underline"

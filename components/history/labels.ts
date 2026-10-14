@@ -41,6 +41,25 @@ export function formatDuration(start: Date | string | null | undefined, end: Dat
   return rest ? `${hours} h ${rest} min` : `${hours} h`;
 }
 
+const DAY_MS = 86_400_000;
+
+/**
+ * Oldest scan date visible on a plan with a history limit (`historyDays`),
+ * or null when the plan keeps the full history.
+ */
+export function historyCutoff(historyDays: number | null, now: number = Date.now()): Date | null {
+  return historyDays === null ? null : new Date(now - historyDays * DAY_MS);
+}
+
+/**
+ * Change between two scores as displayed (whole numbers), so the change always
+ * matches the two values the reader sees. Null when either side is missing.
+ */
+export function shownScoreDiff(current: number | null | undefined, previous: number | null | undefined): number | null {
+  if (current == null || previous == null) return null;
+  return Math.round(current) - Math.round(previous);
+}
+
 /** Points difference rounded to one decimal, or null when either side is missing. */
 export function scoreDiff(current: number | null | undefined, previous: number | null | undefined): number | null {
   if (current == null || previous == null) return null;

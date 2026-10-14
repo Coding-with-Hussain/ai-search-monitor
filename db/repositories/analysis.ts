@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 
 import { type ResultSignals, scoreResult } from "@/services/scoring";
 import { PROVIDER_IDS, type ProviderId } from "@/types/domain";
@@ -187,18 +187,21 @@ export interface QueryHistoryEntry {
 /**
  * Recent completed scans that included this question, newest first, with the
  * question's per-platform outcome in each (two small project-scoped queries).
+ * `since` limits results to the plan's visible history window.
  */
 export async function getQueryScanHistory(
   project: AuthorizedProject,
   queryId: string,
-  opts: { limit?: number } = {},
+  opts: { limit?: number; since?: Date | null } = {},
 ): Promise<QueryHistoryEntry[]> {
   const limit = Math.min(Math.max(opts.limit ?? 12, 1), 50);
+  const scanConds = [eq(scans.projectId, project.id), eq(scans.status, "completed")];
+  if (opts.since) scanConds.push(gte(scans.createdAt, opts.since));
   const scanRows = await db()
     .selectDistinct({ id: scans.id, mode: scans.mode, createdAt: scans.createdAt, completedAt: scans.completedAt })
     .from(scans)
     .innerJoin(aiRuns, and(eq(aiRuns.scanId, scans.id), eq(aiRuns.projectId, project.id), eq(aiRuns.queryId, queryId)))
-    .where(and(eq(scans.projectId, project.id), eq(scans.status, "completed")))
+    .where(and(...scanConds))
     .orderBy(desc(scans.createdAt))
     .limit(limit);
   if (scanRows.length === 0) return [];

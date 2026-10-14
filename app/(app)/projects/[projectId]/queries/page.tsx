@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getLatestCompletedScanRef, getScanResultsForQueries } from "@/db/repositories/analysis";
 import { getProjectForUser } from "@/db/repositories/projects";
-import { countActiveQueries, countQueries, listQueries, MAX_QUERIES_PER_PROJECT } from "@/db/repositories/queries";
+import { countActiveQueries, countQueries, listQueries, MAX_QUERIES_PER_PROJECT, QUERY_PAGE_SIZE } from "@/db/repositories/queries";
 import { requireUser } from "@/lib/auth/session";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { isAppError } from "@/lib/errors";
@@ -60,7 +60,7 @@ export default async function QuestionsPage({
     // Visibility filters need a completed scan; without one, nothing can match.
     const list =
       visibilityFilter && !latest
-        ? { rows: [], total: 0, page: 1, pageSize: 25 }
+        ? { rows: [], total: 0, page: 1, pageSize: QUERY_PAGE_SIZE }
         : await listQueries(project, { ...filters, latestScanId: latest?.id ?? null });
     const results = await getScanResultsForQueries(
       project,

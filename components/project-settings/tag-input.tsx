@@ -23,6 +23,7 @@ export function TagInput({
   maxLength = 60,
   placeholder,
   noun,
+  nounPlural = `${noun}s`,
   invalid,
   describedBy,
 }: {
@@ -36,6 +37,8 @@ export function TagInput({
   placeholder?: string;
   /** Singular noun for messages, e.g. "service". */
   noun: string;
+  /** Plural noun, when not just `${noun}s` (e.g. "aliases"). */
+  nounPlural?: string;
   invalid?: boolean;
   describedBy?: string;
 }) {
@@ -56,7 +59,7 @@ export function TagInput({
     let problem: string | null = null;
     for (const part of parts) {
       if (next.length >= max) {
-        problem = `You can add up to ${max} ${noun}s.`;
+        problem = `You can add up to ${max} ${nounPlural}.`;
         rejected.push(part);
       } else if (part.length < minLength) {
         problem = `Each ${noun} needs at least ${minLength} characters.`;
@@ -159,7 +162,7 @@ export function TagInput({
       )}
 
       {value.length > 0 && (
-        <ul aria-label={`Added ${noun}s`} className="flex flex-wrap gap-2">
+        <ul aria-label={`Added ${nounPlural}`} className="flex flex-wrap gap-2">
           {value.map((tag, index) => (
             <li
               key={`${tag}-${index}`}

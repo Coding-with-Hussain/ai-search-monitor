@@ -149,7 +149,7 @@ export function ProjectSettingsForm({
       >
         <div className="grid gap-5 sm:grid-cols-2">
           <Field id={f("name")} label="Business name" error={errors.name?.message}>
-            <Input id={f("name")} autoComplete="organization" maxLength={120} {...register("name")} {...fieldAria(f("name"), errors.name?.message)} />
+            <Input id={f("name")} autoComplete="organization" maxLength={120} {...register("name")} defaultValue={defaults.name} {...fieldAria(f("name"), errors.name?.message)} />
           </Field>
           <Field id={f("website")} label="Website" optional error={errors.website?.message} hint="Used to detect when AI answers cite your site.">
             <Input
@@ -159,14 +159,15 @@ export function ProjectSettingsForm({
               placeholder="example.com"
               maxLength={200}
               {...register("website")}
+              defaultValue={defaults.website ?? ""}
               {...fieldAria(f("website"), errors.website?.message, true)}
             />
           </Field>
           <Field id={f("industry")} label="Industry" error={errors.industry?.message} hint="A short category, e.g. “Dentist” or “CRM software”.">
-            <Input id={f("industry")} maxLength={80} {...register("industry")} {...fieldAria(f("industry"), errors.industry?.message, true)} />
+            <Input id={f("industry")} maxLength={80} {...register("industry")} defaultValue={defaults.industry} {...fieldAria(f("industry"), errors.industry?.message, true)} />
           </Field>
           <Field id={f("businessType")} label="Business type" error={errors.businessType?.message}>
-            <NativeSelect id={f("businessType")} {...register("businessType")} {...fieldAria(f("businessType"), errors.businessType?.message)}>
+            <NativeSelect id={f("businessType")} {...register("businessType")} defaultValue={defaults.businessType} {...fieldAria(f("businessType"), errors.businessType?.message)}>
               {BUSINESS_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {BUSINESS_TYPE_LABEL[t]}
@@ -175,7 +176,7 @@ export function ProjectSettingsForm({
             </NativeSelect>
           </Field>
           <Field id={f("country")} label="Country" optional error={errors.country?.message}>
-            <Input id={f("country")} autoComplete="country-name" maxLength={80} {...register("country")} {...fieldAria(f("country"), errors.country?.message)} />
+            <Input id={f("country")} autoComplete="country-name" maxLength={80} {...register("country")} defaultValue={defaults.country ?? ""} {...fieldAria(f("country"), errors.country?.message)} />
           </Field>
           <Field
             id={f("city")}
@@ -189,6 +190,7 @@ export function ProjectSettingsForm({
               autoComplete="address-level2"
               maxLength={80}
               {...register("city")}
+              defaultValue={defaults.city ?? ""}
               {...fieldAria(f("city"), errors.city?.message, businessType === "local")}
             />
           </Field>
@@ -210,6 +212,7 @@ export function ProjectSettingsForm({
               rows={3}
               maxLength={500}
               {...register("description")}
+              defaultValue={defaults.description ?? ""}
               {...fieldAria(f("description"), errors.description?.message, true)}
             />
           </Field>
@@ -279,6 +282,7 @@ export function ProjectSettingsForm({
                 minLength={2}
                 maxLength={120}
                 noun="alias"
+                nounPlural="aliases"
                 placeholder="e.g. ABC Dental Clinic"
                 invalid={Boolean(aliasesError)}
                 describedBy={aliasesError ? `${f("aliases")}-error` : undefined}
@@ -339,12 +343,14 @@ export function ProjectSettingsForm({
             error={errors.monitoringFrequency?.message}
             hint={
               locked.length > 0 ? (
-                <span className="inline-flex flex-wrap items-center gap-1">
-                  <Lock className="size-3" aria-hidden="true" />
-                  {locked.map((o) => `${FREQUENCY_LABEL[o.value]} monitoring is available on ${o.availableOn ?? "higher"} plans`).join(". ")}.{" "}
-                  <Link href="/billing#plans" className="font-medium text-foreground underline underline-offset-2">
-                    Compare plans
-                  </Link>
+                <span className="flex items-start gap-1.5">
+                  <Lock className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+                  <span>
+                    {locked.map((o) => `${FREQUENCY_LABEL[o.value]} monitoring is available on ${o.availableOn ?? "higher"} plans`).join(". ")}.{" "}
+                    <Link href="/billing#plans" className="font-medium text-foreground underline underline-offset-2">
+                      Compare plans
+                    </Link>
+                  </span>
                 </span>
               ) : undefined
             }
@@ -353,6 +359,7 @@ export function ProjectSettingsForm({
               id={f("frequency")}
               className="sm:max-w-xs"
               {...register("monitoringFrequency")}
+              defaultValue={defaults.monitoringFrequency}
               {...fieldAria(f("frequency"), errors.monitoringFrequency?.message, locked.length > 0)}
             >
               {frequencyOptions.map((o) => (
@@ -442,7 +449,15 @@ export function ProjectSettingsForm({
         </div>
       </SettingsSection>
 
-      <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-surface px-4 py-3 sm:bottom-4 sm:mx-0 sm:rounded-xl sm:border sm:px-5 sm:shadow-pop">
+      <div
+        className={cn(
+          "z-10 border-border bg-surface py-3",
+          // Stick to the bottom of the screen only while there is something to save.
+          isDirty
+            ? "sticky bottom-0 -mx-4 border-t px-4 sm:bottom-4 sm:mx-0 sm:rounded-xl sm:border sm:px-5 sm:shadow-pop"
+            : "rounded-xl border px-4 shadow-card sm:px-5",
+        )}
+      >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-[13px] text-muted-foreground" aria-live="polite">
             {isDirty ? "You have unsaved changes." : "All changes saved."}

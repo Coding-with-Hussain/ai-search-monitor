@@ -6,7 +6,7 @@ import { PROVIDER_META } from "@/lib/providers-meta";
 import { cn } from "@/lib/utils";
 import { PROVIDER_IDS, type ProviderMetrics } from "@/types/domain";
 
-import { scoreDiff } from "./labels";
+import { shownScoreDiff } from "./labels";
 
 /**
  * AI Visibility per platform for one scan (history detail and reports). The
@@ -52,23 +52,23 @@ export function PlatformScores({
                   </span>
                   {previous !== undefined &&
                     (before ? (
-                      <Delta value={scoreDiff(p.score, before.score)} suffix=" pts" context="vs previous" />
+                      <Delta value={shownScoreDiff(p.score, before.score)} suffix=" pts" context="vs previous" />
                     ) : (
                       <span className="text-xs text-subtle-foreground">No previous data</span>
                     ))}
                 </div>
-                <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-border pt-3 text-xs">
-                  <div className="min-w-0">
-                    <dt className="text-subtle-foreground">Questions</dt>
-                    <dd className="mt-0.5 text-sm font-medium tabular">{formatNumber(p.queriesAnalyzed)}</dd>
+                <dl className="mt-3 space-y-1.5 border-t border-border pt-3 text-[13px]">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-muted-foreground">Questions</dt>
+                    <dd className="font-medium tabular">{formatNumber(p.queriesAnalyzed)}</dd>
                   </div>
-                  <div className="min-w-0">
-                    <dt className="text-subtle-foreground">Recommended</dt>
-                    <dd className="mt-0.5 text-sm font-medium tabular">{formatPercent(p.recommendationRate)}</dd>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-muted-foreground">Recommended in</dt>
+                    <dd className="font-medium tabular">{formatPercent(p.recommendationRate)}</dd>
                   </div>
-                  <div className="min-w-0">
-                    <dt className="text-subtle-foreground">Mentioned</dt>
-                    <dd className="mt-0.5 text-sm font-medium tabular">{formatPercent(p.mentionRate)}</dd>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-muted-foreground">Mentioned in</dt>
+                    <dd className="font-medium tabular">{formatPercent(p.mentionRate)}</dd>
                   </div>
                 </dl>
                 {p.failedRuns > 0 && (

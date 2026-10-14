@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { scoreBand } from "@/services/scoring";
 import type { ScanMetrics } from "@/types/domain";
 
-import { METRIC_NOTE, scoreDiff, TRUST_NOTE } from "./labels";
+import { METRIC_NOTE, shownScoreDiff, TRUST_NOTE } from "./labels";
 
 const BAND = {
   strong: { label: "Strong visibility", variant: "success" as const },
@@ -31,6 +31,7 @@ export function ScoreSummary({
   metrics,
   previousScore,
   heading = "AI Visibility Score",
+  headingLevel = "h4",
   badges,
   children,
   className,
@@ -38,13 +39,16 @@ export function ScoreSummary({
   metrics: ScanMetrics;
   previousScore: number | null;
   heading?: string;
+  /** Heading element for the score title (h4 inside a titled panel). */
+  headingLevel?: "h3" | "h4";
   badges?: React.ReactNode;
   children?: React.ReactNode;
   className?: string;
 }) {
   const score = metrics.overall.runs > 0 ? metrics.overall.score : null;
-  const change = scoreDiff(score, previousScore);
+  const change = shownScoreDiff(score, previousScore);
   const band = BAND[scoreBand(score)];
+  const Heading = headingLevel;
   return (
     <div className={cn("flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-7", className)}>
       <div className="flex justify-center sm:block">
@@ -52,7 +56,7 @@ export function ScoreSummary({
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-base font-semibold tracking-tight">{heading}</h3>
+          <Heading className="text-base font-semibold tracking-tight">{heading}</Heading>
           <Badge variant={band.variant}>{band.label}</Badge>
           {badges}
         </div>

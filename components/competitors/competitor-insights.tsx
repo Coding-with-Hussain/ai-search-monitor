@@ -40,11 +40,13 @@ export function CompetitorInsights({ insights, yourScore }: { insights: Competit
               </div>
               <details className="group border-t border-border">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-2.5 text-[13px] font-medium select-none hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
-                  <span className="inline-flex items-center gap-2">
-                    <Eye className="size-4 text-subtle-foreground" aria-hidden="true" />
-                    {ahead ? "Why are they winning?" : "Where are they stronger?"}
-                    <span className="font-normal text-subtle-foreground">
-                      {signals.length === 0 ? "No clear signals" : `${signals.length} observed ${signals.length === 1 ? "signal" : "signals"}`}
+                  <span className="flex min-w-0 items-start gap-2">
+                    <Eye className="mt-0.5 size-4 shrink-0 text-subtle-foreground" aria-hidden="true" />
+                    <span className="min-w-0">
+                      {ahead ? "Why are they winning?" : "Where are they stronger?"}
+                      <span className="block font-normal text-subtle-foreground sm:ml-2 sm:inline">
+                        {signals.length === 0 ? "No clear signals" : `${signals.length} observed ${signals.length === 1 ? "signal" : "signals"}`}
+                      </span>
                     </span>
                   </span>
                   <ChevronDown className="size-4 shrink-0 text-subtle-foreground transition-transform group-open:rotate-180" aria-hidden="true" />

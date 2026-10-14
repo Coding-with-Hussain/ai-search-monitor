@@ -54,7 +54,16 @@ export async function generateReportAction(input: z.input<typeof generateInput>)
   }, "reports.generate");
 }
 
-const deleteInput = z.object({ projectId: z.uuid("Invalid project."), reportId: z.uuid("Invalid report.") });
+const deleteInput = z.object({
+  projectId: z.uuid("Invalid project."),
+  reportId: z.uuid("Invalid report."),
+  /**
+   * The caller is the deleted report's own page and navigates to the list
+   * afterwards. Revalidating would re-render that page (now missing) in the
+   * action response, so it is skipped; the list is dynamic and loads fresh.
+   */
+  navigateAway: z.boolean().optional(),
+});
 
 /** Delete a stored report (usage already recorded for it is kept). */
 export async function deleteReportAction(input: z.input<typeof deleteInput>) {
@@ -64,8 +73,7 @@ export async function deleteReportAction(input: z.input<typeof deleteInput>) {
     const project = await getProjectForUser(user.id, data.projectId);
     const deleted = await deleteReport(project, data.reportId);
     logger.info("report.deleted", { projectId: project.id, reportId: deleted.id });
-    revalidatePath(`/projects/${project.id}/reports`);
-    revalidatePath(`/projects/${project.id}/reports/${deleted.id}`);
+    if (!data.navigateAway) revalidatePath(`/projects/${project.id}/reports`);
     return { id: deleted.id };
   }, "reports.delete");
 }

@@ -146,22 +146,24 @@ export function QueryFilters({
         Apply filters
       </button>
 
-      <div className="col-span-2 flex min-h-8 items-center gap-2 sm:col-span-3 lg:col-span-1">
-        {active && (
-          <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground">
-            <Link href={basePath} scroll={false}>
-              <X aria-hidden="true" />
-              Clear filters
-            </Link>
-          </Button>
-        )}
-        {pending && (
-          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
-            <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-            Updating…
-          </span>
-        )}
-      </div>
+      {(active || pending) && (
+        <div className="col-span-2 flex min-h-8 items-center gap-2 sm:col-span-3 lg:col-span-1">
+          {active && (
+            <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground">
+              <Link href={basePath} scroll={false}>
+                <X aria-hidden="true" />
+                Clear filters
+              </Link>
+            </Button>
+          )}
+          {pending && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
+              <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+              Updating…
+            </span>
+          )}
+        </div>
+      )}
     </form>
   );
 }

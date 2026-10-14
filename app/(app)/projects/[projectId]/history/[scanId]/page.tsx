@@ -9,7 +9,7 @@ import { CompetitorBars, CompetitorTable } from "@/components/dashboard/competit
 import { ShareOfVoice } from "@/components/dashboard/share-of-voice";
 import { comparisonEntities, competitorColorOrder } from "@/components/history/comparison";
 import { InsightsList } from "@/components/history/insights-list";
-import { TRIGGER_LABEL } from "@/components/history/labels";
+import { historyCutoff, TRIGGER_LABEL } from "@/components/history/labels";
 import { MetricTiles } from "@/components/history/metric-tiles";
 import { Panel } from "@/components/history/panel";
 import { PlatformScores } from "@/components/history/platform-scores";
@@ -34,8 +34,6 @@ import { logger } from "@/lib/logger";
 import { computeScanInsights } from "@/services/reports/insights";
 
 export const metadata: Metadata = { title: "Scan details" };
-
-const DAY_MS = 86_400_000;
 
 function NotesList({ notes }: { notes: string[] }) {
   if (notes.length === 0) return null;
@@ -132,7 +130,8 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ pro
   try {
     const ent = await getEntitlements(user.id);
     const historyDays = ent.plan.limits.historyDays;
-    const outsideWindow = historyDays !== null && scan.createdAt.getTime() < Date.now() - historyDays * DAY_MS;
+    const cutoff = historyCutoff(historyDays);
+    const outsideWindow = cutoff !== null && scan.createdAt < cutoff;
     if (outsideWindow) {
       loaded = { outsideWindow, planName: ent.plan.name, historyDays, previous: null, competitors: [] };
     } else {

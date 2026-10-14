@@ -134,6 +134,7 @@ export default async function RecommendationsPage({
   if (total === 0 && !filtered) {
     return (
       <div className="flex flex-col gap-4 sm:gap-6">
+        <RecommendationViewTracker projectId={project.id} openCount={0} />
         {header(meta)}
         {latest ? (
           <EmptyState

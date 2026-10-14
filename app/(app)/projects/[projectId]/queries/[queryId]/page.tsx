@@ -31,6 +31,7 @@ import {
 import { getProjectForUser, listCompetitors } from "@/db/repositories/projects";
 import { getQuery } from "@/db/repositories/queries";
 import { requireUser } from "@/lib/auth/session";
+import { getEntitlements } from "@/lib/billing/entitlements";
 import { isAppError } from "@/lib/errors";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { logger } from "@/lib/logger";
@@ -38,9 +39,13 @@ import { logger } from "@/lib/logger";
 export const metadata: Metadata = { title: "Question details" };
 
 const uuid = z.uuid();
+const DAY_MS = 86_400_000;
 
+const optionDateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+
+/** Compact scan option label, e.g. "Oct 7, 2026 (latest) · simulated". */
 function scanLabel(date: Date, mode: "live" | "mock", latest: boolean) {
-  return `${formatDate(date)}${mode === "mock" ? " (simulated)" : ""}${latest ? " · latest" : ""}`;
+  return `${optionDateFmt.format(date)}${latest ? " (latest)" : ""}${mode === "mock" ? " · simulated" : ""}`;
 }
 
 export default async function QueryDetailPage({
@@ -71,19 +76,31 @@ export default async function QueryDetailPage({
     scan: ScanRef | null;
     runs: QueryRunDetail[];
     notice: string | null;
+    historyDays: number | null;
+    hasOlderResults: boolean;
   };
   try {
-    const [history, competitors] = await Promise.all([getQueryScanHistory(project, query.id, { limit: 12 }), listCompetitors(project)]);
+    const ent = await getEntitlements(user.id);
+    // Plans with a history limit only show scans inside their window.
+    const historyDays = ent.plan.limits.historyDays;
+    const since = historyDays === null ? null : new Date(new Date().getTime() - historyDays * DAY_MS);
+    const [history, competitors] = await Promise.all([
+      getQueryScanHistory(project, query.id, { limit: 12, since }),
+      listCompetitors(project),
+    ]);
     let scan: ScanRef | null = null;
     let runs: QueryRunDetail[] = [];
     let notice: string | null = null;
 
     if (scanParam) {
       const requested = uuid.safeParse(scanParam).success ? await findScanRef(project, scanParam) : null;
-      const requestedRuns = requested ? await getQueryRunsForScan(project, requested.id, query.id) : [];
+      const outsideWindow = Boolean(requested && since && requested.createdAt < since);
+      const requestedRuns = requested && !outsideWindow ? await getQueryRunsForScan(project, requested.id, query.id) : [];
       if (requested && requestedRuns.length > 0) {
         scan = requested;
         runs = requestedRuns;
+      } else if (outsideWindow) {
+        notice = `That scan is older than the ${historyDays} days of history included in your ${ent.plan.name} plan, so the most recent results are shown instead.`;
       } else {
         notice = "The selected scan didn't check this question, so the most recent results are shown instead.";
       }
@@ -94,7 +111,9 @@ export default async function QueryDetailPage({
         [scan, runs] = await Promise.all([findScanRef(project, entry.scanId), getQueryRunsForScan(project, entry.scanId, query.id)]);
       }
     }
-    loaded = { history, competitors, scan, runs, notice };
+    // Distinguish "never checked" from "only checked before the history window".
+    const hasOlderResults = !scan && since !== null && (await getQueryScanHistory(project, query.id, { limit: 1 })).length > 0;
+    loaded = { history, competitors, scan, runs, notice, historyDays, hasOlderResults };
   } catch (error) {
     logger.error("query_detail.load_failed", { projectId: project.id, queryId: query.id, error: (error as Error).message });
     return (
@@ -107,7 +126,7 @@ export default async function QueryDetailPage({
     );
   }
 
-  const { history, competitors, scan, runs, notice } = loaded;
+  const { history, competitors, scan, runs, notice, historyDays, hasOlderResults } = loaded;
   const paused = query.status === "paused";
 
   const options: ScanOption[] = history.map((e, i) => ({ id: e.scanId, label: scanLabel(e.date, e.mode, i === 0) }));
@@ -167,11 +186,20 @@ export default async function QueryDetailPage({
         {notice && <Alert variant="info">{notice}</Alert>}
         <EmptyState
           icon={MessageSquareDashed}
-          title="This question hasn't been checked yet"
+          title={hasOlderResults ? "No results in your plan's history window" : "This question hasn't been checked yet"}
           description={
-            paused
-              ? "It's paused, so scans skip it. Resume monitoring to include it in your next scan."
-              : "It will be asked on every monitored AI platform in your next scan. Use the Run scan button above to check it now."
+            hasOlderResults
+              ? `Your plan includes the last ${historyDays} days of history, and no scan in that period checked this question.${paused ? " It's paused, so scans skip it. Resume monitoring to include it in your next scan." : " It will be checked in your next scan."}`
+              : paused
+                ? "It's paused, so scans skip it. Resume monitoring to include it in your next scan."
+                : "It will be asked on every monitored AI platform in your next scan. Use the Run scan button above to check it now."
+          }
+          action={
+            hasOlderResults ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href="/billing#plans">Compare plans</Link>
+              </Button>
+            ) : undefined
           }
         />
       </div>
@@ -213,7 +241,7 @@ export default async function QueryDetailPage({
         <WhatThisMeans meaning={meaning} recommendationsHref={`/projects/${project.id}/recommendations`} />
       </DetailSection>
 
-      <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
+      <div className="grid gap-4 sm:gap-6 2xl:grid-cols-2">
         <DetailSection
           title="Competitors in these answers"
           description="Where you and each tracked competitor appeared, by AI platform."

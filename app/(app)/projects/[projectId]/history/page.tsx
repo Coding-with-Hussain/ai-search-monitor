@@ -6,7 +6,7 @@ import { notFound } from "next/navigation";
 import { EmptyState } from "@/components/app/empty-state";
 import { SimulationBadge } from "@/components/app/simulation-badge";
 import { type VisibilityPoint, VisibilityChart } from "@/components/dashboard/visibility-chart";
-import { TRUST_NOTE } from "@/components/history/labels";
+import { historyCutoff, shownScoreDiff, TRUST_NOTE } from "@/components/history/labels";
 import { Pager, parsePage } from "@/components/history/pager";
 import { RetryButton } from "@/components/history/retry-button";
 import { type HistoryScanRow, ScanList } from "@/components/history/scan-list";
@@ -31,7 +31,6 @@ export const metadata: Metadata = { title: "History" };
 
 const PAGE_SIZE = 20;
 const CHART_LIMIT = 200;
-const DAY_MS = 86_400_000;
 
 function scanDate(s: Pick<ScanSummary, "completedAt" | "createdAt">) {
   return (s.completedAt ?? s.createdAt).toISOString();
@@ -56,7 +55,7 @@ function toRows(projectId: string, scans: ScanSummary[], olderScore: number | nu
       trigger: s.trigger,
       mode: s.mode,
       score,
-      change: s.status === "completed" && score !== null && baseline !== null ? Math.round((score - baseline) * 10) / 10 : null,
+      change: s.status === "completed" ? shownScoreDiff(score, baseline) : null,
       queryCount: s.queryCount,
       providerCount: s.providers.length,
       failedItems: s.failedItems,
@@ -94,7 +93,7 @@ export default async function HistoryPage({
   try {
     const ent = await getEntitlements(user.id);
     const historyDays = ent.plan.limits.historyDays;
-    const since = historyDays === null ? null : new Date(Date.now() - historyDays * DAY_MS);
+    const since = historyCutoff(historyDays);
     const [pageScans, history, hiddenOlder, activeQueries] = await Promise.all([
       listScans(project, { limit: PAGE_SIZE + 1, offset: (page - 1) * PAGE_SIZE, since }),
       getScoreHistory(project, { since, limit: CHART_LIMIT }),
