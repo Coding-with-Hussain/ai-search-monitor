@@ -40,7 +40,7 @@ async function completeOnboarding(page: Page) {
   await page.getByRole("button", { name: "Continue" }).click();
 
   // Step 4 — monitoring (keep the scan small)
-  await page.getByLabel("Number of questions").fill("6");
+  await page.getByRole("spinbutton", { name: "Number of questions" }).fill("6");
   await page.getByRole("button", { name: "Analyze My Business" }).click();
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/, { timeout: 30_000 });
 }
@@ -86,10 +86,27 @@ test("a user cannot open another user's project", async ({ page, browser }) => {
   await signUp(page, ownerEmail);
   await completeOnboarding(page);
   const projectUrl = page.url();
+  await expect(page.getByText("Scan completed")).toBeVisible({ timeout: 90_000 });
+  // Find the owner's scan id from their history page.
+  await page.goto(`${projectUrl}/history`);
+  const scanHref = await page.locator('a[href*="/history/"]').first().getAttribute("href");
+  const scanId = scanHref!.split("/").pop()!;
 
   const other = await browser.newPage();
   await signUp(other, `e2e-other-${Date.now()}@example.test`);
+  // Streaming responses may already carry a 200 status; what matters is that
+  // the ownership check renders "not found" and no project data is sent.
   const res = await other.goto(projectUrl);
-  expect(res?.status()).toBe(404);
+  expect([200, 404]).toContain(res?.status());
+  await expect(other.getByText("This page isn’t on our radar.")).toBeVisible({ timeout: 20_000 });
+  expect(await other.content()).not.toContain("Riverside Dental");
+
+  // The scan progress API and scan detail page refuse another user's scan.
+  const api = await other.request.get(`/api/scans/${scanId}`);
+  expect(api.status()).toBe(404);
+  const ownerApi = await page.request.get(`/api/scans/${scanId}`);
+  expect(ownerApi.status()).toBe(200);
+  await other.goto(`${projectUrl}/history/${scanId}`);
+  await expect(other.getByText("This page isn’t on our radar.")).toBeVisible({ timeout: 20_000 });
   await other.close();
 });
