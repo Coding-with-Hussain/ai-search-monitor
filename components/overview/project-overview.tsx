@@ -24,7 +24,7 @@ export function ProjectOverview({ data }: { data: ProjectOverviewData }) {
       <ScoreHero data={data} />
       <MetricGrid data={data} />
       <PlatformCards data={data} />
-      <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 lg:items-start">
         <CompetitorSection data={data} />
         <RecommendationsPreview data={data} />
       </div>

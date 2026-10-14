@@ -82,10 +82,14 @@ export function PricingTable({
               )}
               data-testid={`plan-${id}`}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-base font-semibold">{plan.name}</h3>
-                {plan.popular && <Badge>Most popular</Badge>}
-                {isCurrent && <Badge variant="success">Current plan</Badge>}
+                {(plan.popular || isCurrent) && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {isCurrent && <Badge variant="success">Current plan</Badge>}
+                    {plan.popular && !isCurrent && <Badge>Most popular</Badge>}
+                  </div>
+                )}
               </div>
               <p className="mt-1.5 min-h-10 text-[13px] text-muted-foreground">{plan.tagline}</p>
               <div className="mt-5 flex items-baseline gap-1">
