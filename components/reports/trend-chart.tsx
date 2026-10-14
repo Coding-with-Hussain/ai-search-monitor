@@ -29,7 +29,8 @@ export function TrendChart({ points, label }: { points: Array<{ date: string; sc
       : `${label}: ${Math.round(last.score)} on ${formatDate(last.date)}.`;
 
   return (
-    <figure className="print-avoid-break">
+    <figure className="print-avoid-break pt-2">
+      {/* The top padding keeps the "100" axis label (centered on its gridline) inside the figure when printed. */}
       <div role="img" aria-label={summary} className="relative h-44 w-full pr-8 pl-9">
         {/* Y axis labels */}
         <div className="absolute inset-y-0 left-0 w-7" aria-hidden="true">

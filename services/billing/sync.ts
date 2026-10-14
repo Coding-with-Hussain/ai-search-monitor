@@ -6,12 +6,13 @@ import { z } from "zod";
 
 import { db } from "@/db";
 import { subscriptions } from "@/db/schema";
+import { track } from "@/lib/analytics/server";
 import type { SubscriptionStatus } from "@/lib/billing/entitlements";
 import { type BillingInterval, isPlanId, type PlanId } from "@/lib/billing/plans";
 import { planFromPrice, stripeId } from "@/lib/billing/stripe";
 import { logger } from "@/lib/logger";
 
-import { ADOPTABLE_STATUSES, mapStripeStatus } from "./status";
+import { ADOPTABLE_STATUSES, isLiveStatus, mapStripeStatus } from "./status";
 
 /**
  * Stripe subscription -> `subscriptions` row synchronisation.
@@ -42,6 +43,9 @@ export interface SubscriptionRowValues {
   trialEndsAt: Date | null;
 }
 
+const toInterval = (value: string | null | undefined): BillingInterval | null =>
+  value === "month" || value === "year" ? value : null;
+
 const fromUnix = (seconds: number | null | undefined) =>
   typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0 ? new Date(seconds * 1000) : null;
 
@@ -65,10 +69,8 @@ export function resolveSubscriptionPlan(
 
   const metaPlan = sub.metadata?.plan;
   if (isPlanId(metaPlan)) {
-    const metaInterval = sub.metadata?.interval;
-    const recurring = item?.price?.recurring?.interval;
-    const interval: BillingInterval | null =
-      metaInterval === "month" || metaInterval === "year" ? metaInterval : recurring === "month" || recurring === "year" ? recurring : null;
+    // The price's own billing interval is authoritative; checkout metadata may be stale.
+    const interval = toInterval(item?.price?.recurring?.interval) ?? toInterval(sub.metadata?.interval);
     return { plan: metaPlan, interval, source: "metadata" };
   }
   return null;
@@ -79,11 +81,10 @@ export function subscriptionToRowValues(sub: SubscriptionInput): SubscriptionRow
   const status = mapStripeStatus(sub.status);
   const item = primarySubscriptionItem(sub);
   const resolved = resolveSubscriptionPlan(sub);
-  const recurring = item?.price?.recurring?.interval;
   return {
     plan: resolved?.plan ?? null,
     status,
-    billingInterval: resolved?.interval ?? (recurring === "month" || recurring === "year" ? recurring : null),
+    billingInterval: resolved?.interval ?? toInterval(item?.price?.recurring?.interval),
     stripeSubscriptionId: sub.id,
     stripeCustomerId: stripeId(sub.customer),
     stripePriceId: item?.price?.id ?? null,
@@ -128,6 +129,7 @@ export interface SyncResult {
   reason?: "account_not_found" | "superseded";
   started?: boolean;
   plan?: PlanId;
+  interval?: BillingInterval | null;
   status?: SubscriptionStatus;
   previousStatus?: SubscriptionStatus;
 }
@@ -182,6 +184,11 @@ export async function syncSubscription(input: {
       return { applied: false, userId: row.userId, reason: "superseded" } satisfies SyncResult;
     }
 
+    if (row.stripeSubscriptionId && row.stripeSubscriptionId !== values.stripeSubscriptionId && isLiveStatus(row.status)) {
+      // Two live subscriptions for one account: the newer one wins, but someone should check the older one.
+      logger.warn("billing.sync.replaced_live_subscription", { userId: row.userId, subscriptionId: values.stripeSubscriptionId });
+    }
+
     await tx
       .update(subscriptions)
       .set({
@@ -211,6 +218,7 @@ export async function syncSubscription(input: {
       userId: row.userId,
       started: isSubscriptionStart(row, values),
       plan,
+      interval: values.billingInterval,
       status: values.status,
       previousStatus: row.status,
     } satisfies SyncResult;
@@ -230,4 +238,15 @@ export async function rememberStripeCustomer(userId: string, customerId: string)
     return;
   }
   await db().update(subscriptions).set({ stripeCustomerId: customerId }).where(eq(subscriptions.id, row.id));
+}
+
+/** Analytics: record `subscription_started` once per newly adopted paid subscription. */
+export async function trackSubscriptionStart(result: SyncResult, source: string) {
+  if (!result.applied || !result.started || !result.userId) return;
+  await track("subscription_started", result.userId, {
+    plan: result.plan ?? null,
+    status: result.status ?? null,
+    interval: result.interval ?? null,
+    source,
+  });
 }

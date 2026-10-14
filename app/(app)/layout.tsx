@@ -15,6 +15,7 @@ import { listProjectsForUser } from "@/db/repositories/projects";
 import { getEntitlements, getUsageSummary } from "@/lib/billing/entitlements";
 import { requireUser } from "@/lib/auth/session";
 import { features } from "@/lib/env";
+import { daysUntil } from "@/lib/format";
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
@@ -26,7 +27,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const [projects, ent] = await Promise.all([listProjectsForUser(user.id), getEntitlements(user.id)]);
   const usage = await getUsageSummary(user.id, ent);
   const showDevTools = features.devTools() && (process.env.NODE_ENV !== "production" || Boolean(profile?.isAdmin));
-  const trialDaysLeft = ent.isTrial && ent.trialEndsAt ? Math.max(0, Math.ceil((ent.trialEndsAt.getTime() - Date.now()) / 86_400_000)) : null;
+  const trialDaysLeft = ent.isTrial ? daysUntil(ent.trialEndsAt) : null;
 
   const navProjects = projects.map((p) => ({ id: p.id, name: p.name, isDemo: p.isDemo, score: p.latestScore }));
   const meter = (
@@ -36,7 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <UpgradeProvider>
       <div className="flex min-h-dvh">
-        <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col gap-6 border-r border-border bg-surface/60 px-3 py-4 lg:flex">
+        <aside className="no-print sticky top-0 hidden h-dvh w-64 shrink-0 flex-col gap-6 border-r border-border bg-surface/60 px-3 py-4 lg:flex">
           <Link href="/dashboard" className="px-2">
             <Logo />
           </Link>
@@ -47,7 +48,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/85 px-4 backdrop-blur sm:px-6">
+          <header className="no-print sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/85 px-4 backdrop-blur sm:px-6">
             <MobileNav projects={navProjects} showDevTools={showDevTools} footer={meter} />
             <Link href="/dashboard" className="lg:hidden">
               <Logo compact />

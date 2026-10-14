@@ -193,7 +193,7 @@ export default async function HistoryPage({
                 Score of each completed scan{historyDays !== null ? ` in the last ${pluralize(historyDays, "day")}` : ""}.
               </p>
             </div>
-            {chartSimulated && <SimulationBadge label="Includes simulated scans" />}
+            {chartSimulated && <SimulationBadge label="Includes simulated scans" className="self-start" />}
           </div>
           <VisibilityChart points={points} providers={chartProviders} defaultRange="all" />
           <p className="mt-3 text-xs text-subtle-foreground">{TRUST_NOTE}</p>

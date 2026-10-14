@@ -133,11 +133,8 @@ export function ScanList({ rows }: { rows: HistoryScanRow[] }) {
         {rows.map((row) => (
           <li key={row.id} className="flex flex-col gap-2.5 px-4 py-4 sm:px-5">
             <div className="flex items-start justify-between gap-3">
-              <DateLink row={row} className="text-sm font-semibold text-foreground hover:text-primary hover:underline" />
-              <div className="flex flex-wrap justify-end gap-1.5">
-                {row.mode === "mock" && <SimulationBadge />}
-                <ScanStatusBadge status={row.status} />
-              </div>
+              <DateLink row={row} className="min-w-0 text-sm font-semibold text-foreground hover:text-primary hover:underline" />
+              <ScanStatusBadge status={row.status} className="shrink-0" />
             </div>
             {row.status === "completed" && (
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 tabular">
@@ -155,12 +152,19 @@ export function ScanList({ rows }: { rows: HistoryScanRow[] }) {
               · {TRIGGER_LABEL[row.trigger]}
             </p>
             {row.note && <p className="line-clamp-3 text-xs text-muted-foreground">{row.note}</p>}
-            {row.href && (
-              <Link href={row.href} className="inline-flex items-center gap-0.5 text-[13px] font-medium text-primary hover:underline">
-                View scan details
-                <span className="sr-only"> from {formatDate(row.date)}</span>
-                <ChevronRight className="size-3.5" aria-hidden="true" />
-              </Link>
+            {(row.href || row.mode === "mock") && (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                {row.href ? (
+                  <Link href={row.href} className="inline-flex items-center gap-0.5 text-[13px] font-medium text-primary hover:underline">
+                    View scan details
+                    <span className="sr-only"> from {formatDate(row.date)}</span>
+                    <ChevronRight className="size-3.5" aria-hidden="true" />
+                  </Link>
+                ) : (
+                  <span />
+                )}
+                {row.mode === "mock" && <SimulationBadge />}
+              </div>
             )}
           </li>
         ))}

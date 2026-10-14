@@ -77,4 +77,14 @@ describe("entitlements", () => {
     const stale = usagePeriod({ currentPeriodStart: new Date("2026-08-01T00:00:00Z"), currentPeriodEnd: new Date("2026-09-01T00:00:00Z") }, now);
     expect(stale.start.toISOString()).toBe("2026-10-01T00:00:00.000Z");
   });
+
+  it("gives annual subscribers a monthly allowance window, not one for the whole year", () => {
+    const yearly = { currentPeriodStart: new Date("2026-03-31T10:00:00Z"), currentPeriodEnd: new Date("2027-03-31T10:00:00Z") };
+    const p = usagePeriod(yearly, now); // now = 2026-10-15
+    expect(p.start.toISOString()).toBe("2026-09-30T10:00:00.000Z");
+    expect(p.end.toISOString()).toBe("2026-10-31T10:00:00.000Z");
+    const late = usagePeriod(yearly, new Date("2027-03-20T00:00:00Z"));
+    expect(late.start.toISOString()).toBe("2027-02-28T10:00:00.000Z");
+    expect(late.end.toISOString()).toBe("2027-03-31T10:00:00.000Z");
+  });
 });

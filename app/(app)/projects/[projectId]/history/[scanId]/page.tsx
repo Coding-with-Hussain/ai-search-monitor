@@ -5,8 +5,8 @@ import { notFound } from "next/navigation";
 
 import { EmptyState } from "@/components/app/empty-state";
 import { SimulationBadge } from "@/components/app/simulation-badge";
-import { CompetitorBars, CompetitorTable } from "@/components/dashboard/competitor-comparison";
 import { ShareOfVoice } from "@/components/dashboard/share-of-voice";
+import { CompetitorComparisonDetails } from "@/components/history/competitor-comparison-details";
 import { comparisonEntities, competitorColorOrder } from "@/components/history/comparison";
 import { InsightsList } from "@/components/history/insights-list";
 import { historyCutoff, TRIGGER_LABEL } from "@/components/history/labels";
@@ -255,10 +255,7 @@ function CompletedScanBody({
           {metrics.competitors.length === 0 ? (
             <p className="text-sm text-muted-foreground">No competitors were tracked in this scan.</p>
           ) : (
-            <div className="flex flex-col gap-5">
-              <CompetitorBars entities={entities} />
-              <CompetitorTable entities={entities} />
-            </div>
+            <CompetitorComparisonDetails entities={entities} />
           )}
         </Panel>
         <Panel className="lg:col-span-2" title="Share of voice" description="Who AI assistants recommended across monitored answers.">

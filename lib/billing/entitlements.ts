@@ -56,9 +56,29 @@ function calendarMonth(now = new Date()) {
  * Usage window: the Stripe billing period when one exists and is current,
  * otherwise the calendar month (UTC).
  */
+/** Add whole months in UTC, clamping to the last day of shorter months. */
+function addUtcMonths(date: Date, months: number) {
+  const d = new Date(date.getTime());
+  const day = d.getUTCDate();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day, lastDay));
+  return d;
+}
+
 export function usagePeriod(sub: { currentPeriodStart: Date | null; currentPeriodEnd: Date | null } | null, now = new Date()) {
   if (sub?.currentPeriodStart && sub.currentPeriodEnd && sub.currentPeriodEnd > now && sub.currentPeriodStart <= now) {
-    return { start: sub.currentPeriodStart, end: sub.currentPeriodEnd };
+    const start = sub.currentPeriodStart;
+    const lengthDays = (sub.currentPeriodEnd.getTime() - start.getTime()) / 86_400_000;
+    if (lengthDays <= 32) return { start, end: sub.currentPeriodEnd };
+    // Annual billing: allowances are monthly, so use the current month-long
+    // window anchored on the billing period start.
+    let k = 0;
+    while (addUtcMonths(start, k + 1) <= now) k++;
+    const windowStart = addUtcMonths(start, k);
+    const windowEnd = addUtcMonths(start, k + 1);
+    return { start: windowStart, end: windowEnd < sub.currentPeriodEnd ? windowEnd : sub.currentPeriodEnd };
   }
   return calendarMonth(now);
 }

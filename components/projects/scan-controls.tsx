@@ -2,7 +2,7 @@
 
 import { Play, Radar, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { startScanAction } from "@/app/actions/scans";
@@ -33,44 +33,55 @@ export function ScanControls({
   const router = useRouter();
   const [scan, setScan] = useState<ScanProgressDto | null>(initialScan);
   const [pollError, setPollError] = useState<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const active = scan && (scan.status === "queued" || scan.status === "running");
-
-  const poll = useCallback(
-    async (scanId: string) => {
-      try {
-        const res = await fetch(`/api/scans/${scanId}`, { cache: "no-store" });
-        if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? "Could not load scan status.");
-        const data = (await res.json()) as ScanProgressDto;
-        setScan(data);
-        setPollError(null);
-        if (data.status === "completed") {
-          toast.success("Scan completed", { description: data.score !== null ? `AI Visibility score: ${Math.round(data.score)}/100` : undefined });
-          trackClient("scan_completed", { projectId, mode: data.mode });
-          router.refresh();
-          return;
-        }
-        if (data.status === "failed" || data.status === "cancelled") {
-          router.refresh();
-          return;
-        }
-        timer.current = setTimeout(() => poll(scanId), POLL_MS);
-      } catch (error) {
-        setPollError((error as Error).message);
-        timer.current = setTimeout(() => poll(scanId), POLL_MS * 3);
-      }
-    },
-    [projectId, router],
-  );
+  const isActive = (s: ScanProgressDto | null) => Boolean(s && (s.status === "queued" || s.status === "running"));
+  const active = isActive(scan);
+  // The scan currently being polled (null = not polling).
+  const [pollId, setPollId] = useState<string | null>(isActive(initialScan) ? initialScan!.id : null);
 
   useEffect(() => {
-    if (initialScan && (initialScan.status === "queued" || initialScan.status === "running")) {
-      timer.current = setTimeout(() => poll(initialScan.id), POLL_MS);
-    }
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
+    if (!pollId) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const schedule = (delay: number) => {
+      timer = setTimeout(async () => {
+        if (cancelled) return;
+        try {
+          const res = await fetch(`/api/scans/${pollId}`, { cache: "no-store" });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? "Could not load scan status.");
+          const data = (await res.json()) as ScanProgressDto;
+          if (cancelled) return;
+          setScan(data);
+          setPollError(null);
+          if (data.status === "completed") {
+            toast.success("Scan completed", {
+              description: data.score !== null ? `AI Visibility score: ${Math.round(data.score)}/100` : undefined,
+            });
+            trackClient("scan_completed", { projectId, mode: data.mode });
+            setPollId(null);
+            router.refresh();
+            return;
+          }
+          if (data.status === "failed" || data.status === "cancelled") {
+            setPollId(null);
+            router.refresh();
+            return;
+          }
+          schedule(POLL_MS);
+        } catch (error) {
+          if (cancelled) return;
+          setPollError((error as Error).message);
+          schedule(POLL_MS * 3);
+        }
+      }, delay);
     };
-  }, [initialScan, poll]);
+
+    schedule(POLL_MS);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [pollId, projectId, router]);
 
   const { execute, pending } = useServerAction(startScanAction, {
     onSuccess: (data) => {
@@ -91,8 +102,7 @@ export function ScanControls({
         error: null,
         notes: data.notes,
       });
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => poll(data.scanId), 600);
+      setPollId(data.scanId);
     },
   });
 

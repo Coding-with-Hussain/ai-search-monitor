@@ -14,7 +14,7 @@ import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 
 import { isLiveStatus, LIVE_STATUSES, mapStripeStatus, trialCarryOverEnd } from "./status";
-import { syncSubscription, type SyncResult } from "./sync";
+import { syncSubscription, type SyncResult, trackSubscriptionStart } from "./sync";
 
 /**
  * Account-level billing operations against Stripe. Every function takes a
@@ -97,9 +97,12 @@ export async function startCheckout(user: SessionUser, plan: PlanId, interval: B
   const live = pickCurrentSubscription(subs.filter((s) => isLiveStatus(mapStripeStatus(s.status))));
   if (live) {
     // Heal our copy if a webhook was missed, then hand over to the portal.
-    await syncSubscription({ userId: user.id, customerId, subscription: live }).catch((error: unknown) => {
+    try {
+      const result = await syncSubscription({ userId: user.id, customerId, subscription: live });
+      await trackSubscriptionStart(result, "checkout_portal_redirect");
+    } catch (error) {
       logger.warn("billing.checkout_sync_failed", { userId: user.id, error: (error as Error).message });
-    });
+    }
     const portal = await createPortalSession(customerId);
     return { kind: "portal", url: portal.url };
   }
@@ -153,7 +156,9 @@ export async function refreshSubscriptionFromStripe(userId: string): Promise<Syn
     pickCurrentSubscription(subs) ??
     (row.stripeSubscriptionId ? (subs.find((s) => s.id === row.stripeSubscriptionId) ?? null) : null);
   if (!current) return null;
-  return syncSubscription({ userId, customerId: row.stripeCustomerId, subscription: current });
+  const result = await syncSubscription({ userId, customerId: row.stripeCustomerId, subscription: current });
+  await trackSubscriptionStart(result, "billing_refresh");
+  return result;
 }
 
 /**

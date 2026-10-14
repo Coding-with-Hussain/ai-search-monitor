@@ -48,11 +48,13 @@ export default async function ProjectLayout({ children, params }: { children: Re
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="no-print flex flex-col gap-6">
       <ProjectHeader
         project={project}
         actions={<ScanControls projectId={project.id} initialScan={initialScan} mockMode={features.mockMode()} disabledReason={disabledReason} />}
       />
       <ProjectNav projectId={project.id} />
+      </div>
       <div>{children}</div>
     </div>
   );

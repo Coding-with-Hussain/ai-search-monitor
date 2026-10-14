@@ -75,3 +75,9 @@ export function formatNumber(n: number) {
 export function pluralize(n: number, singular: string, plural = `${singular}s`) {
   return `${formatNumber(n)} ${n === 1 ? singular : plural}`;
 }
+
+/** Whole days from now until `date` (never negative). */
+export function daysUntil(date: Date | null | undefined, now = Date.now()) {
+  if (!date) return null;
+  return Math.max(0, Math.ceil((date.getTime() - now) / 86_400_000));
+}

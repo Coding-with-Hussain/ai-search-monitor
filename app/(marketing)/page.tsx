@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
+import { AccountDeletedNotice } from "@/components/marketing/account-deleted-notice";
 import { CompetitorSection } from "@/components/marketing/competitor-section";
 import { LANDING_FAQ } from "@/components/marketing/faq-data";
 import { FaqSection } from "@/components/marketing/faq-section";
@@ -32,6 +34,9 @@ export default function LandingPage() {
   return (
     <>
       <JsonLd data={jsonLdGraph(organizationNode(), softwareApplicationNode(), faqPageNode(LANDING_FAQ, "/"))} />
+      <Suspense fallback={null}>
+        <AccountDeletedNotice />
+      </Suspense>
       <Hero />
       <ProblemSection />
       <HowItWorks />

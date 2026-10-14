@@ -53,14 +53,10 @@ export function ReportList({ projectId, rows }: { projectId: string; rows: Repor
           <TableBody>
             {rows.map((row) => (
               <TableRow key={row.id}>
-                <TableCell className="max-w-80 pl-5">
+                <TableCell className="pl-5">
                   <div className="flex min-w-0 items-center gap-2.5">
                     <FileText className="size-4 shrink-0 text-subtle-foreground" aria-hidden="true" />
-                    <Link
-                      href={hrefFor(row.id)}
-                      className="truncate font-medium text-foreground hover:text-primary hover:underline"
-                      title={row.title}
-                    >
+                    <Link href={hrefFor(row.id)} className="font-medium text-foreground hover:text-primary hover:underline">
                       {row.title}
                     </Link>
                     {row.isSimulation && <SimulationBadge label="Simulated" className="shrink-0" />}

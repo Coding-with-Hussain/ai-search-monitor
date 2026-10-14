@@ -1,5 +1,6 @@
 "use client";
 
+import { unstable_rethrow } from "next/navigation";
 import { useCallback, useState, useTransition } from "react";
 import { toast } from "sonner";
 
@@ -33,7 +34,9 @@ export function useServerAction<TArgs extends unknown[], T>(
           let result: ActionResult<T>;
           try {
             result = await action(...args);
-          } catch {
+          } catch (error) {
+            // Let Next.js handle redirect()/notFound() thrown by the action.
+            unstable_rethrow(error);
             result = { ok: false, error: "Network error. Check your connection and try again." };
           }
           if (result.ok) {

@@ -16,16 +16,42 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
+type ScanFactsInput = Pick<
+  Scan,
+  | "createdAt"
+  | "startedAt"
+  | "completedAt"
+  | "mode"
+  | "trigger"
+  | "providers"
+  | "queryCount"
+  | "totalItems"
+  | "completedItems"
+  | "failedItems"
+> & { scoringVersion?: string | null };
+
 /** Key facts about one scan: timing, mode, trigger and collection counts. */
-export function ScanFacts({ scan }: { scan: Pick<Scan, "createdAt" | "startedAt" | "completedAt" | "mode" | "trigger" | "providers" | "queryCount" | "totalItems" | "completedItems" | "failedItems"> & { scoringVersion?: string | null } }) {
-  const duration = formatDuration(scan.startedAt ?? scan.createdAt, scan.completedAt);
+export function ScanFacts({ scan }: { scan: ScanFactsInput }) {
   const providers = scan.providers.map(providerName).join(", ");
+  // Historical (backfilled) scans are dated to the period they represent; their run timing isn't meaningful.
+  const historical = scan.trigger === "seed";
+  const start = scan.startedAt ?? scan.createdAt;
+  const duration = historical ? null : formatDuration(start, scan.completedAt);
   return (
     <Card className="p-5">
       <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">
-        <Fact label="Started">{formatDateTime(scan.startedAt ?? scan.createdAt)}</Fact>
-        <Fact label="Finished">{scan.completedAt ? formatDateTime(scan.completedAt) : "Not finished"}</Fact>
-        <Fact label="Duration">{duration ?? "—"}</Fact>
+        {historical ? (
+          <>
+            <Fact label="Scan date">{formatDateTime(scan.completedAt ?? scan.createdAt)}</Fact>
+            <Fact label="Duration">Not recorded for historical scans</Fact>
+          </>
+        ) : (
+          <>
+            <Fact label="Started">{formatDateTime(start)}</Fact>
+            <Fact label="Finished">{scan.completedAt ? formatDateTime(scan.completedAt) : "Not finished"}</Fact>
+            <Fact label="Duration">{duration ?? "—"}</Fact>
+          </>
+        )}
         <Fact label="Mode">{scan.mode === "mock" ? "Simulation (no real AI calls)" : "Live AI answers"}</Fact>
         <Fact label="Trigger">{TRIGGER_LABEL[scan.trigger]}</Fact>
         <Fact label="Questions checked">{formatNumber(scan.queryCount)}</Fact>

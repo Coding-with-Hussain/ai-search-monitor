@@ -2,7 +2,7 @@
 
 import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { refreshBillingStatusAction } from "@/app/actions/billing";
@@ -11,60 +11,78 @@ import { Button } from "@/components/ui/button";
 const AUTO_ATTEMPTS = 5;
 const INTERVAL_MS = 3000;
 
+type CheckResult = { active: true } | { active: false; error?: string };
+
+/** Ask the server to pull the subscription from Stripe; true once it is active. */
+async function checkActivation(): Promise<CheckResult> {
+  try {
+    const result = await refreshBillingStatusAction();
+    if (!result.ok) return { active: false, error: result.error };
+    const { found, status } = result.data;
+    return found && (status === "active" || status === "trialing") ? { active: true } : { active: false };
+  } catch {
+    return { active: false, error: "Network error. Check your connection and try again." };
+  }
+}
+
 /**
  * Shown after Stripe Checkout while the subscription is not active on our
- * side yet: asks the server to pull the subscription from Stripe a few times
- * (so activation doesn't depend on webhook latency), then offers a manual
- * "Refresh status" button.
+ * side yet: checks with Stripe a few times (so activation doesn't depend on
+ * webhook latency), then offers a manual "Refresh status" button.
  */
 export function ActivationPoller() {
   const router = useRouter();
   const [checking, startTransition] = useTransition();
   const [polling, setPolling] = useState(true);
-  const attempts = useRef(0);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const check = useCallback(
-    (manual: boolean) => {
+  useEffect(() => {
+    let cancelled = false;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    function tick() {
+      attempts += 1;
       startTransition(async () => {
-        attempts.current += 1;
-        let active = false;
-        try {
-          const result = await refreshBillingStatusAction();
-          active = result.ok && result.data.found && (result.data.status === "active" || result.data.status === "trialing");
-          if (!result.ok && manual) toast.error(result.error);
-        } catch {
-          if (manual) toast.error("Network error. Check your connection and try again.");
-        }
-        if (active) {
+        const result = await checkActivation();
+        if (cancelled) return;
+        if (result.active) {
           setPolling(false);
           toast.success("Your subscription is active");
           router.refresh();
-          return;
+        } else if (attempts < AUTO_ATTEMPTS) {
+          timer = setTimeout(tick, INTERVAL_MS);
+        } else {
+          setPolling(false);
         }
-        if (!manual && attempts.current < AUTO_ATTEMPTS) {
-          timer.current = setTimeout(() => check(false), INTERVAL_MS);
-          return;
-        }
-        setPolling(false);
-        if (manual) toast.message("Still activating — this can take up to a minute. Please try again shortly.");
       });
-    },
-    [router],
-  );
+    }
 
-  useEffect(() => {
-    timer.current = setTimeout(() => check(false), 600);
+    timer = setTimeout(tick, 600);
     return () => {
-      if (timer.current) clearTimeout(timer.current);
+      cancelled = true;
+      if (timer) clearTimeout(timer);
     };
-  }, [check]);
+  }, [router]);
+
+  function refreshNow() {
+    startTransition(async () => {
+      const result = await checkActivation();
+      if (result.active) {
+        toast.success("Your subscription is active");
+        router.refresh();
+      } else if (result.error) {
+        toast.error(result.error);
+      } else {
+        toast.message("Still activating — this can take up to a minute. Please try again shortly.");
+      }
+    });
+  }
 
   const busy = checking || polling;
   return (
-    <Button type="button" size="sm" variant="outline" onClick={() => check(true)} loading={busy} aria-live="polite">
+    <Button type="button" size="sm" variant="outline" onClick={refreshNow} loading={busy}>
       {!busy && <RefreshCw aria-hidden="true" />}
-      {busy ? "Checking status…" : "Refresh status"}
+      <span aria-live="polite">{busy ? "Checking status…" : "Refresh status"}</span>
     </Button>
   );
 }

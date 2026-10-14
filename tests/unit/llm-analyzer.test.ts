@@ -4,8 +4,9 @@ import { analyzeHeuristically } from "@/services/ai/analyzer/heuristic";
 import { analyzeResponse } from "@/services/ai/analyzer";
 import { analyzeWithLlm, type LlmCompletion, reconcile } from "@/services/ai/analyzer/llm";
 import { BUSINESS, COMPETITORS, NOT_MENTIONED, NUMBERED_LIST } from "@/tests/fixtures/responses";
+import type { Citation } from "@/types/domain";
 
-const input = (fixture: typeof NUMBERED_LIST) => ({
+const input = (fixture: { response: string; citations: Citation[] }) => ({
   response: fixture.response,
   citations: fixture.citations,
   business: BUSINESS,

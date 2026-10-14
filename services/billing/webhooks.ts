@@ -6,12 +6,11 @@ import { z } from "zod";
 
 import { db } from "@/db";
 import { notifications, subscriptions } from "@/db/schema";
-import { track } from "@/lib/analytics/server";
 import { getPlan } from "@/lib/billing/plans";
 import { getStripe, isMissingResourceError, stripeId } from "@/lib/billing/stripe";
 import { logger } from "@/lib/logger";
 
-import { rememberStripeCustomer, syncSubscription, type SyncResult } from "./sync";
+import { rememberStripeCustomer, syncSubscription, trackSubscriptionStart } from "./sync";
 
 /**
  * Stripe webhook event handling. The route verifies the signature and
@@ -49,17 +48,6 @@ export function invoiceSubscriptionId(invoice: Pick<Stripe.Invoice, "parent">): 
   return stripeId(invoice.parent?.subscription_details?.subscription ?? null);
 }
 
-async function afterSync(result: SyncResult, eventType: string, interval?: string | null) {
-  if (result.applied && result.started && result.userId) {
-    await track("subscription_started", result.userId, {
-      plan: result.plan ?? null,
-      status: result.status ?? null,
-      interval: interval ?? null,
-      source: eventType,
-    });
-  }
-}
-
 async function syncById(subscriptionId: string, eventType: string, opts: { userId?: string | null; fallback?: Stripe.Subscription } = {}) {
   const subscription = await freshSubscription(subscriptionId, opts.fallback);
   if (!subscription) {
@@ -71,7 +59,7 @@ async function syncById(subscriptionId: string, eventType: string, opts: { userI
     customerId: stripeId(subscription.customer),
     subscription,
   });
-  await afterSync(result, eventType, subscription.metadata?.interval);
+  await trackSubscriptionStart(result, eventType);
   return result;
 }
 
@@ -176,7 +164,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<boolean> {
       // The payload is the final state (status "canceled").
       const sub = event.data.object;
       const result = await syncSubscription({ customerId: stripeId(sub.customer), subscription: sub });
-      await afterSync(result, event.type);
+      await trackSubscriptionStart(result, event.type);
       return true;
     }
 

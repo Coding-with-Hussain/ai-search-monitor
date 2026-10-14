@@ -22,8 +22,9 @@ interface Ranked {
 }
 
 const DEFAULT_LIMIT = 5;
+/** Scores are shown as whole numbers; comparisons and differences use the shown values so sentences never contradict them. */
 const r = (n: number) => Math.round(n);
-const points = (n: number) => pluralize(Math.abs(r(n)), "point");
+const points = (n: number) => pluralize(Math.abs(n), "point");
 
 function scoreOf(c: CompetitorMetrics) {
   return c.metrics.score;
@@ -49,7 +50,7 @@ export function computeScanInsights(
 
   // 1. Overall score change.
   if (prev) {
-    const delta = Math.round((o.score - prev.overall.score) * 10) / 10;
+    const delta = r(o.score) - r(prev.overall.score);
     if (delta >= 1) {
       wins.push({ rank: 0, text: `AI Visibility rose ${points(delta)}, from ${r(prev.overall.score)} to ${r(o.score)}, since the previous scan.` });
     } else if (delta <= -1) {
@@ -63,9 +64,10 @@ export function computeScanInsights(
     for (const c of metrics.competitors) {
       const before = prev.competitors.find((p) => p.competitorId === c.competitorId);
       if (!before) continue;
-      const wasAhead = scoreOf(before) > prev.overall.score;
-      const isAhead = scoreOf(c) > o.score;
-      if (wasAhead && !isAhead) {
+      const wasAhead = r(scoreOf(before)) > r(prev.overall.score);
+      const isAhead = r(scoreOf(c)) > r(o.score);
+      const isLevel = r(scoreOf(c)) === r(o.score);
+      if (wasAhead && !isAhead && !isLevel) {
         wins.push({ rank: 1, text: `Moved ahead of ${c.name} (${r(o.score)} vs ${r(scoreOf(c))}).` });
       } else if (!wasAhead && isAhead) {
         overtakenIds.add(c.competitorId);
@@ -76,8 +78,9 @@ export function computeScanInsights(
 
   // 3. Standing against tracked competitors.
   const competitors = [...metrics.competitors].sort((a, b) => scoreOf(b) - scoreOf(a));
-  const ahead = competitors.filter((c) => scoreOf(c) > o.score);
-  if (competitors.length > 0 && ahead.length === 0) {
+  const ahead = competitors.filter((c) => r(scoreOf(c)) > r(o.score));
+  const level = competitors.some((c) => r(scoreOf(c)) === r(o.score));
+  if (competitors.length > 0 && ahead.length === 0 && !level) {
     const closest = competitors[0];
     wins.push({
       rank: 2,
@@ -91,7 +94,7 @@ export function computeScanInsights(
     const others = ahead.length - 1;
     problems.push({
       rank: 2,
-      text: `${top.name} scores ${points(scoreOf(top) - o.score)} higher (${r(scoreOf(top))} vs ${r(o.score)})${
+      text: `${top.name} scores ${points(r(scoreOf(top)) - r(o.score))} higher (${r(scoreOf(top))} vs ${r(o.score)})${
         others > 0 ? `, and ${pluralize(others, "other tracked competitor")} ${others === 1 ? "is" : "are"} also ahead` : ""
       }.`,
     });

@@ -19,8 +19,10 @@ export function trackClient(event: AnalyticsEvent, props: AnalyticsProps = {}) {
   }
   const body = JSON.stringify({ api_key: key, event, distinct_id: distinctId, properties: { ...props, $current_url: location.href } });
   try {
-    navigator.sendBeacon?.(`${host}/capture/`, body) ||
+    const queued = typeof navigator.sendBeacon === "function" && navigator.sendBeacon(`${host}/capture/`, body);
+    if (!queued) {
       void fetch(`${host}/capture/`, { method: "POST", body, keepalive: true, headers: { "content-type": "application/json" } });
+    }
   } catch {
     // ignore analytics failures
   }

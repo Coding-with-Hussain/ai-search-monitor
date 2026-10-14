@@ -1,6 +1,6 @@
 import "server-only";
 
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { cache } from "react";
 
 import { unauthorized } from "@/lib/errors";
@@ -34,6 +34,8 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
       fullName: typeof meta.full_name === "string" ? meta.full_name : null,
     };
   } catch (error) {
+    // Never swallow Next.js control-flow errors (dynamic rendering bailout, redirects).
+    unstable_rethrow(error);
     logger.warn("auth.get_user_failed", { error: (error as Error).message });
     return null;
   }

@@ -33,7 +33,7 @@ export function StatusTabs({
                 scroll={false}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex h-8 items-center justify-center gap-1.5 rounded-md px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground",
+                  "flex h-8 items-center justify-center gap-1 rounded-md px-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground sm:gap-1.5 sm:px-3",
                   active && "bg-surface text-foreground shadow-sm",
                 )}
               >
