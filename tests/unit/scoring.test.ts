@@ -78,9 +78,11 @@ describe("scoring engine", () => {
   });
 
   it("computes score change in points and percent", () => {
-    expect(scoreChange(72, 64)).toEqual({ points: 8, percent: 12.5 });
+    expect(scoreChange(72, 64)).toBe(8);
     expect(scoreChange(50, null)).toBeNull();
-    expect(scoreChange(10, 0)).toEqual({ points: 10, percent: null });
+    // Difference of the displayed whole numbers: 53.4 → 49.0 reads as 53 → 49.
+    expect(scoreChange(49.0, 53.4)).toBe(-4);
+    expect(scoreChange(68.2, 58.3)).toBe(10);
   });
 
   it("bands scores", () => {

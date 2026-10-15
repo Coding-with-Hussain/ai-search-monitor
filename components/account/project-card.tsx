@@ -6,11 +6,12 @@ import { SimulationBadge } from "@/components/app/simulation-badge";
 import { Delta } from "@/components/dashboard/delta";
 import { ScoreRing } from "@/components/dashboard/score-ring";
 import { Badge } from "@/components/ui/badge";
+import type { ProjectScanMeta } from "@/db/repositories/scans";
 import type { Project } from "@/db/schema";
 import { formatDate, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { scoreChange } from "@/services/scoring";
 
-import type { ProjectScanMeta } from "@/db/repositories/scans";
 import { isPast, monitoringLabel, projectLocation } from "./labels";
 
 function Stat({ label, children }: { label: string; children: React.ReactNode }) {
@@ -49,7 +50,7 @@ export function ProjectCard({
 }) {
   const Heading = headingLevel;
   const score = project.latestScore;
-  const delta = score !== null && project.previousScore !== null ? score - project.previousScore : null;
+  const delta = scoreChange(score, project.previousScore);
   const location = projectLocation(project);
   const simulated = !project.isDemo && meta?.latestMode === "mock";
   const nextScan = project.monitoringEnabled && project.monitoringFrequency !== "manual" ? project.nextScanAt : null;

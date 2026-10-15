@@ -32,10 +32,11 @@ export function overviewLinks(data: Pick<ProjectOverviewData, "mode" | "projectI
   };
 }
 
-/** Difference between two numbers, or null when either is missing. */
-export function diff(current: number | null | undefined, previous: number | null | undefined): number | null {
+/** Difference between two values as displayed with `digits` decimals (null when either is missing). */
+export function shownDiff(current: number | null | undefined, previous: number | null | undefined, digits = 0): number | null {
   if (current == null || previous == null) return null;
-  return Math.round((current - previous) * 10) / 10;
+  const f = 10 ** digits;
+  return (Math.round(current * f) - Math.round(previous * f)) / f;
 }
 
 /** Most important monitored questions: high priority first, then weakest results. */

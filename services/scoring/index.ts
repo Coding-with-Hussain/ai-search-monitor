@@ -108,11 +108,14 @@ export function aggregateSignals(results: ResultSignals[]): EntityMetrics {
 }
 
 /** Change between two scores, as points and percent (null when no baseline). */
-export function scoreChange(current: number | null | undefined, previous: number | null | undefined) {
+/**
+ * Score change in points as readers see it: the difference of the displayed
+ * whole-number scores, so "53 → 49" reads as −4 on every page, report, alert
+ * and email. Null when either side is missing.
+ */
+export function scoreChange(current: number | null | undefined, previous: number | null | undefined): number | null {
   if (current == null || previous == null) return null;
-  const points = round1(current - previous);
-  const percent = previous > 0 ? round1(((current - previous) / previous) * 100) : null;
-  return { points, percent };
+  return Math.round(current) - Math.round(previous);
 }
 
 export function scoreBand(score: number | null | undefined): "strong" | "moderate" | "weak" | "none" {

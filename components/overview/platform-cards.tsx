@@ -6,9 +6,10 @@ import { InfoTip } from "@/components/dashboard/info-tip";
 import { Card } from "@/components/ui/card";
 import { formatNumber, formatPercent } from "@/lib/format";
 import { PROVIDER_META } from "@/lib/providers-meta";
+import { scoreChange } from "@/services/scoring";
 import { PROVIDER_IDS, type ProviderId, type ProviderMetrics } from "@/types/domain";
 
-import { diff, overviewLinks } from "./helpers";
+import { overviewLinks } from "./helpers";
 import { SimulationLabel } from "./simulation-label";
 import { TOUR_TARGETS, type ProjectOverviewData } from "./types";
 
@@ -122,7 +123,7 @@ function PlatformCard({
     );
   }
 
-  const change = previous ? diff(current.score, previous.score) : null;
+  const change = previous ? scoreChange(current.score, previous.score) : null;
   return (
     <Card className="flex h-full flex-col p-4">
       <PlatformName id={id} />

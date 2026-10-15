@@ -1,3 +1,4 @@
+import { scoreChange } from "@/services/scoring";
 import type { ScanStatus } from "@/types/domain";
 
 /** Client-safe labels shared by the History and Reports areas. */
@@ -55,10 +56,7 @@ export function historyCutoff(historyDays: number | null, now: number = Date.now
  * Change between two scores as displayed (whole numbers), so the change always
  * matches the two values the reader sees. Null when either side is missing.
  */
-export function shownScoreDiff(current: number | null | undefined, previous: number | null | undefined): number | null {
-  if (current == null || previous == null) return null;
-  return Math.round(current) - Math.round(previous);
-}
+export const shownScoreDiff = scoreChange;
 
 /** Points difference rounded to one decimal, or null when either side is missing. */
 export function scoreDiff(current: number | null | undefined, previous: number | null | undefined): number | null {

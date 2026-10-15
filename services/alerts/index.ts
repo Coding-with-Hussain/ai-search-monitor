@@ -7,6 +7,7 @@ import { notifications, type Scan, scans } from "@/db/schema";
 import { sendEmail } from "@/lib/email";
 import { alertEmail } from "@/lib/email/templates";
 import { appUrl } from "@/lib/env";
+import { scoreChange } from "@/services/scoring";
 import type { ScanMetrics } from "@/types/domain";
 
 /**
@@ -48,7 +49,7 @@ export function computeAlerts(input: {
 
   if (!previous) return alerts;
   const prevScore = previous.overall.score;
-  const delta = Math.round((current.overall.score - prevScore) * 10) / 10;
+  const delta = scoreChange(current.overall.score, prevScore) ?? 0;
 
   if (previous.overall.mentionRate > 0 && current.overall.mentionRate === 0) {
     alerts.push({

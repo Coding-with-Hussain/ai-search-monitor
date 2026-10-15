@@ -1,3 +1,5 @@
+import { scoreChange } from "@/services/scoring";
+
 import { escapeHtml } from "./index";
 
 export interface WeeklyReportEmailData {
@@ -24,7 +26,7 @@ function layout(title: string, body: string) {
 }
 
 export function weeklyReportEmail(d: WeeklyReportEmailData) {
-  const change = d.previousScore === null ? null : Math.round((d.score - d.previousScore) * 10) / 10;
+  const change = scoreChange(d.score, d.previousScore);
   const changeText = change === null ? "First report" : `${change >= 0 ? "+" : ""}${change}`;
   const rows = [
     ["Your score", `${Math.round(d.score)}`],

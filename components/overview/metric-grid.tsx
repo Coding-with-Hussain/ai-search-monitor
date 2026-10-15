@@ -1,7 +1,9 @@
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { formatPercent, formatPosition } from "@/lib/format";
 
-import { diff, formatSignedPoints, NOT_ENOUGH_DATA } from "./helpers";
+import { scoreChange } from "@/services/scoring";
+
+import { formatSignedPoints, NOT_ENOUGH_DATA, shownDiff } from "./helpers";
 import type { ProjectOverviewData } from "./types";
 
 const notEnough = <span className="text-xs text-subtle-foreground">{NOT_ENOUGH_DATA}</span>;
@@ -14,9 +16,12 @@ export function MetricGrid({ data }: { data: ProjectOverviewData }) {
   const gap = data.metrics.competitorGap;
   const prevGap = data.previous?.competitorGap ?? null;
   // A delta only makes sense when there is a baseline; null renders "No previous data".
-  const delta = (current: number | null, previous: number | null | undefined) => (p ? diff(current, previous ?? null) : null);
+  // Changes are taken between the values as displayed (e.g. 37% → 33% is −4),
+  // so a tile never contradicts its own numbers or the history page.
+  const delta = (current: number | null, previous: number | null | undefined, digits = 0) =>
+    p ? shownDiff(current, previous ?? null, digits) : null;
   // Compare gaps only against the same competitor; otherwise explain why there is no delta.
-  const gapDelta = !gap || !p ? null : prevGap && prevGap.competitorName === gap.competitorName ? diff(gap.points, prevGap.points) : undefined;
+  const gapDelta = !gap || !p ? null : prevGap && prevGap.competitorName === gap.competitorName ? shownDiff(gap.points, prevGap.points) : undefined;
 
   return (
     <section aria-labelledby="key-metrics-heading">
@@ -28,7 +33,7 @@ export function MetricGrid({ data }: { data: ProjectOverviewData }) {
           label="AI Visibility"
           value={hasRuns ? Math.round(o.score) : "—"}
           suffix={hasRuns ? "/100" : undefined}
-          delta={hasRuns ? delta(o.score, p?.score) : undefined}
+          delta={hasRuns ? (p ? scoreChange(o.score, p.score) : null) : undefined}
           deltaSuffix=" pts"
           footnote={notEnough}
           help="Average score of every monitored AI answer (0–100), combining mentions, recommendations, position, citations and sentiment. A proprietary monitoring metric, not a search-engine ranking."
@@ -52,7 +57,7 @@ export function MetricGrid({ data }: { data: ProjectOverviewData }) {
         <MetricCard
           label="Average position"
           value={o.averagePosition === null ? "—" : `#${formatPosition(o.averagePosition)}`}
-          delta={o.averagePosition === null ? undefined : delta(o.averagePosition, p?.averagePosition)}
+          delta={o.averagePosition === null ? undefined : delta(o.averagePosition, p?.averagePosition, 1)}
           invertDelta
           footnote={notEnough}
           help="Your average place in AI recommendation lists when you are recommended. Lower is better (#1 is the top spot)."

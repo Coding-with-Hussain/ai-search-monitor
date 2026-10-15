@@ -5,6 +5,7 @@ import { Delta } from "@/components/dashboard/delta";
 import type { QueryHistoryEntry } from "@/db/repositories/analysis";
 import { formatDate, formatShortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { scoreChange } from "@/services/scoring";
 
 /**
  * This question's score across recent scans: a compact bar list where every
@@ -24,7 +25,7 @@ export function QueryScoreHistory({
   }
   const includesSimulation = entries.some((e) => e.mode === "mock");
   const [latest, previous] = entries;
-  const change = latest?.score != null && previous?.score != null ? latest.score - previous.score : null;
+  const change = scoreChange(latest?.score, previous?.score);
 
   return (
     <div className="space-y-3">

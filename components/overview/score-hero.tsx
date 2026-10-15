@@ -46,22 +46,12 @@ export function ScoreHero({ data }: { data: ProjectOverviewData }) {
             <DataSourceBadges data={data} />
           </div>
           <p className="mt-2.5">
-            {change ? (
-              change.percent !== null ? (
-                <Delta value={change.percent} suffix="%" context="vs previous period" className="text-sm [&_svg]:size-4" />
-              ) : (
-                <Delta value={change.points} suffix=" pts" context="vs previous period" className="text-sm [&_svg]:size-4" />
-              )
+            {change !== null ? (
+              <Delta value={change} suffix=" pts" context="vs previous scan" className="text-sm [&_svg]:size-4" />
             ) : (
-              <span className="text-sm text-subtle-foreground">First completed scan, no previous period yet</span>
+              <span className="text-sm text-subtle-foreground">First completed scan, no previous scan yet</span>
             )}
           </p>
-          {change && change.percent !== null && (
-            <p className="mt-0.5 text-xs text-subtle-foreground tabular">
-              {formatSignedPoints(change.points)} {Math.abs(Math.round(change.points)) === 1 ? "point" : "points"} since
-              the previous scan
-            </p>
-          )}
           <p className="mt-3 text-[13px] text-muted-foreground">{cov.text}</p>
           <p className="text-[13px] text-muted-foreground">Latest scan: {formatDate(data.scannedAt)}</p>
           <div className="mt-3">
