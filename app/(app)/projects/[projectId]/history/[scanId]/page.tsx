@@ -32,6 +32,7 @@ import { isAppError } from "@/lib/errors";
 import { formatDate, formatNumber, pluralize } from "@/lib/format";
 import { logger } from "@/lib/logger";
 import { computeScanInsights } from "@/services/reports/insights";
+import { comparableScans, coverageSentence } from "@/services/scans/coverage";
 
 export const metadata: Metadata = { title: "Scan details" };
 
@@ -219,8 +220,10 @@ function CompletedScanBody({
   previous: Scan | null;
   trackedCompetitorIds: string[];
 }) {
-  const previousMetrics = previous?.metrics ?? null;
-  const previousScore = previous?.score != null ? Number(previous.score) : null;
+  // Scans that checked different question sets are not compared.
+  const comparable = comparableScans(metrics, previous?.metrics);
+  const previousMetrics = comparable ? (previous?.metrics ?? null) : null;
+  const previousScore = comparable && previous?.score != null ? Number(previous.score) : null;
   const insights = computeScanInsights(metrics, previousMetrics);
   const entities = comparisonEntities(metrics, businessName);
 
@@ -233,7 +236,22 @@ function CompletedScanBody({
         </Alert>
       )}
 
-      <Panel title="Results" description={previous ? `Compared with the scan on ${formatDate(previous.completedAt ?? previous.createdAt)}.` : "The first completed scan for this project."}>
+      {metrics.coverage && (
+        <Alert variant="warning" title="Partial scan">
+          {coverageSentence(metrics.coverage)}. The highest-priority questions were checked first.
+        </Alert>
+      )}
+
+      <Panel
+        title="Results"
+        description={
+          !previous
+            ? "The first completed scan for this project."
+            : comparable
+              ? `Compared with the scan on ${formatDate(previous.completedAt ?? previous.createdAt)}.`
+              : "Not compared with the previous scan: a different set of questions was checked."
+        }
+      >
         <ScoreSummary metrics={metrics} previousScore={previousScore} />
         <MetricTiles className="mt-6" overall={metrics.overall} previous={previousMetrics?.overall ?? null} />
       </Panel>

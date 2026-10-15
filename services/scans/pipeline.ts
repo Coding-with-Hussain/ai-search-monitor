@@ -35,7 +35,9 @@ import { evaluateScanAlerts } from "@/services/alerts";
 import { computeScanMetrics, type MetricsRunInput } from "@/services/metrics/aggregate";
 import { generateRecommendations } from "@/services/recommendations/engine";
 import { scoreResult } from "@/services/scoring";
-import { PROVIDER_IDS, type ProviderId, type ScanMode } from "@/types/domain";
+import { PROVIDER_IDS, type ProviderId, type ScanMetrics, type ScanMode } from "@/types/domain";
+
+import { comparableScans, scanCoverage } from "./coverage";
 
 /**
  * Scan pipeline
@@ -139,6 +141,8 @@ export async function createScan(opts: CreateScanOptions): Promise<Scan> {
       if (providers.length === 0) throw validationError("Enable at least one AI platform for this project.");
 
       const notes: string[] = [];
+      const activeTotal = activeQueries.length;
+      let limitedBy: "quota" | "cap" | null = null;
 
       // 3. Usage limits (monthly queries) — enforced on the server.
       if (!opts.skipEntitlements) {
@@ -171,6 +175,7 @@ export async function createScan(opts: CreateScanOptions): Promise<Scan> {
             `Limited to your ${remaining} remaining monthly queries (of ${activeQueries.length} active). Highest-priority questions were checked first.`,
           );
           activeQueries = activeQueries.slice(0, remaining);
+          limitedBy = "quota";
         }
       }
 
@@ -181,6 +186,7 @@ export async function createScan(opts: CreateScanOptions): Promise<Scan> {
         if (allowed < 1) throw validationError("This scan exceeds the per-scan safety cap. Choose fewer AI platforms.");
         notes.push(`Limited to ${allowed} questions by the per-scan safety cap.`);
         activeQueries = activeQueries.slice(0, allowed);
+        limitedBy ??= "cap";
       }
 
       const [created] = await tx
@@ -195,7 +201,10 @@ export async function createScan(opts: CreateScanOptions): Promise<Scan> {
           queryCount: activeQueries.length,
           totalItems: activeQueries.length * providers.length,
           notes,
-          config: opts.mockStrength !== undefined ? { mockStrength: opts.mockStrength } : {},
+          config: {
+            ...(opts.mockStrength !== undefined ? { mockStrength: opts.mockStrength } : {}),
+            ...(limitedBy ? { activeQuestions: activeTotal, limitedBy } : {}),
+          },
           createdAt,
         })
         .returning();
@@ -249,6 +258,11 @@ export async function createScan(opts: CreateScanOptions): Promise<Scan> {
     if (isActiveScanConflict(error)) throw conflict("A scan is already running for this project.");
     throw error;
   }
+}
+
+function withCoverage(metrics: ScanMetrics, scan: Scan): ScanMetrics {
+  const coverage = scanCoverage(scan);
+  return coverage ? { ...metrics, coverage } : metrics;
 }
 
 /** Atomically claim up to `limit` runs for processing. */
@@ -602,7 +616,7 @@ async function finalizeClaimedScan(scan: Scan) {
 
   // 8–9. Metrics + competitor comparison
   const { runs, input } = await loadMetricsInput(scan, project);
-  const metrics = computeScanMetrics(input);
+  const metrics = withCoverage(computeScanMetrics(input), scan);
 
   if (metrics.runsSucceeded === 0) {
     const firstError = runs.find((r) => r.error)?.error ?? "No AI provider returned a result.";
@@ -673,7 +687,12 @@ async function finalizeClaimedScan(scan: Scan) {
 
   // 11–12. Scan summary + project metrics
   const completedAt = scan.trigger === "seed" ? scan.createdAt : new Date();
-  const previousScore = project.latestScore;
+  // The project's "previous score" is only kept when the two scans checked the
+  // same full question set; otherwise there is no meaningful change to show.
+  const [previousLatest] = project.latestScanId
+    ? await db().select({ metrics: scans.metrics }).from(scans).where(eq(scans.id, project.latestScanId)).limit(1)
+    : [];
+  const previousScore = comparableScans(metrics, previousLatest?.metrics) ? project.latestScore : null;
   await db().transaction(async (tx) => {
     await tx
       .update(scans)
@@ -756,7 +775,7 @@ export async function recalculateScan(scanId: string) {
     await db().update(aiAnalysis).set({ score: scoreResult(a) }).where(eq(aiAnalysis.id, a.id));
   }
   const { input } = await loadMetricsInput(scan, project);
-  const metrics = computeScanMetrics(input);
+  const metrics = withCoverage(computeScanMetrics(input), scan);
   await db().update(scans).set({ score: metrics.overall.score, metrics }).where(eq(scans.id, scanId));
   if (project.latestScanId === scanId) {
     await db().update(projects).set({ latestScore: metrics.overall.score }).where(eq(projects.id, project.id));

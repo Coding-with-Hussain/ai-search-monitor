@@ -25,6 +25,7 @@ import { PLAN_IDS, PLANS } from "@/lib/billing/plans";
 import { isAppError } from "@/lib/errors";
 import { pluralize } from "@/lib/format";
 import { logger } from "@/lib/logger";
+import { scanCoverage } from "@/services/scans/coverage";
 import { PROVIDER_IDS, type ProviderId } from "@/types/domain";
 
 export const metadata: Metadata = { title: "History" };
@@ -37,15 +38,19 @@ function scanDate(s: Pick<ScanSummary, "completedAt" | "createdAt">) {
 }
 
 /** Table rows with the change vs the previous completed scan (the next completed row, or `older`). */
-function toRows(projectId: string, scans: ScanSummary[], olderScore: number | null): HistoryScanRow[] {
+function toRows(projectId: string, scans: ScanSummary[], older: { score: number | null; partial: boolean } | null): HistoryScanRow[] {
   return scans.map((s, i) => {
-    let baseline: number | null = olderScore;
+    let baseline: number | null = older?.score ?? null;
+    let baselinePartial = older?.partial ?? false;
     for (let j = i + 1; j < scans.length; j++) {
       if (scans[j].status === "completed" && scans[j].score !== null) {
         baseline = Number(scans[j].score);
+        baselinePartial = Boolean(scanCoverage(scans[j]));
         break;
       }
     }
+    // Scans that checked different question sets are not compared.
+    const comparable = !scanCoverage(s) && !baselinePartial;
     const score = s.score === null ? null : Number(s.score);
     const linkable = s.status === "completed" || s.status === "failed" || s.status === "cancelled";
     return {
@@ -55,7 +60,7 @@ function toRows(projectId: string, scans: ScanSummary[], olderScore: number | nu
       trigger: s.trigger,
       mode: s.mode,
       score,
-      change: s.status === "completed" ? shownScoreDiff(score, baseline) : null,
+      change: s.status === "completed" && comparable ? shownScoreDiff(score, baseline) : null,
       queryCount: s.queryCount,
       providerCount: s.providers.length,
       failedItems: s.failedItems,
@@ -105,7 +110,8 @@ export default async function HistoryPage({
     // Baseline for the oldest completed scan on this page: the completed scan before it.
     const lastCompleted = [...scans].reverse().find((s) => s.status === "completed");
     const older = lastCompleted ? await getPreviousCompletedScan(project, lastCompleted.createdAt) : null;
-    data = { ent, historyDays, scans, hasNext, history, hiddenOlder, activeQueries, olderScore: older?.score ?? null };
+    const olderBaseline = older ? { score: older.score === null ? null : Number(older.score), partial: Boolean(scanCoverage(older)) } : null;
+    data = { ent, historyDays, scans, hasNext, history, hiddenOlder, activeQueries, olderBaseline };
   } catch (error) {
     logger.error("history.load_failed", { projectId: project.id, error: (error as Error).message });
     return (
@@ -118,7 +124,7 @@ export default async function HistoryPage({
     );
   }
 
-  const { ent, historyDays, scans, hasNext, history, hiddenOlder, activeQueries, olderScore } = data;
+  const { ent, historyDays, scans, hasNext, history, hiddenOlder, activeQueries, olderBaseline } = data;
   const unlimitedPlan = PLAN_IDS.map((id) => PLANS[id]).find((p) => p.limits.historyDays === null);
   const limitNote =
     hiddenOlder && historyDays !== null ? (
@@ -175,7 +181,7 @@ export default async function HistoryPage({
   }));
   const chartProviders = PROVIDER_IDS.filter((id: ProviderId) => history.some((h) => h.providers[id] != null));
   const chartSimulated = history.some((h) => h.mode === "mock");
-  const rows = toRows(project.id, scans, olderScore === null ? null : Number(olderScore));
+  const rows = toRows(project.id, scans, olderBaseline);
 
   return (
     <div className="flex flex-col gap-4 sm:gap-6">

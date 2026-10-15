@@ -197,7 +197,10 @@ export const scans = pgTable("scans", {
   metrics: jsonb("metrics").$type<ScanMetrics>(),
   notes: text("notes").array().notNull().default(sql`'{}'`),
   /** Pipeline options captured at creation (e.g. simulation strength for demo history). */
-  config: jsonb("config").$type<{ mockStrength?: number }>().notNull().default({}),
+  config: jsonb("config")
+    .$type<{ mockStrength?: number; activeQuestions?: number; limitedBy?: "quota" | "cap" }>()
+    .notNull()
+    .default({}),
   error: text("error"),
   startedAt: ts("started_at"),
   heartbeatAt: ts("heartbeat_at"),

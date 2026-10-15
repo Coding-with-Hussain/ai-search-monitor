@@ -43,4 +43,19 @@ describe("alert rules", () => {
     expect(overtake).toHaveLength(1);
     expect(overtake[0].title).toContain(base.competitors[0].name);
   });
+
+  it("compares scores as displayed, so equal whole numbers never alert", () => {
+    const alerts = computeAlerts({ projectName: "ABC", current: withScore(base, 2.6), previous: withScore(base, 3.4), isSimulation: false });
+    expect(alerts.map((a) => a.type)).toEqual(["scan_completed"]);
+    const drop = computeAlerts({ projectName: "ABC", current: withScore(base, 49.2), previous: withScore(base, 55.4), isSimulation: false });
+    expect(drop.find((a) => a.type === "visibility_drop")?.body).toContain("from 55 to 49 (-6 points)");
+  });
+
+  it("does not compare a partial scan with a full one", () => {
+    const partial: ScanMetrics = { ...withScore(base, 30), coverage: { checked: 10, active: 20, reason: "quota" } };
+    const alerts = computeAlerts({ projectName: "ABC", current: partial, previous: withScore(base, 60), isSimulation: false });
+    expect(alerts.map((a) => a.type)).toEqual(["scan_completed"]);
+    expect(alerts[0].body).toContain("10 of 20 active questions checked");
+  });
 });
+

@@ -7,7 +7,7 @@ import { notifications, type Scan, scans } from "@/db/schema";
 import { sendEmail } from "@/lib/email";
 import { alertEmail } from "@/lib/email/templates";
 import { appUrl } from "@/lib/env";
-import { scoreChange } from "@/services/scoring";
+import { comparableScans, coverageSentence } from "@/services/scans/coverage";
 import type { ScanMetrics } from "@/types/domain";
 
 /**
@@ -35,37 +35,41 @@ export function computeAlerts(input: {
 }): Alert[] {
   const { current, previous } = input;
   const alerts: Alert[] = [];
+  // Everything is compared as displayed (whole-number scores), so an alert
+  // never says "fell from 3 to 3" or "45 vs your 45".
   const score = Math.round(current.overall.score);
   const label = input.isSimulation ? " (simulation)" : "";
+  const partial = current.coverage ? ` Partial scan: ${coverageSentence(current.coverage)}.` : "";
 
   alerts.push({
     type: "scan_completed",
     severity: "success",
     title: "AI visibility scan completed",
-    body: `${input.projectName} scored ${score}/100 across ${current.runsSucceeded} AI answers${label}.`,
+    body: `${input.projectName} scored ${score}/100 across ${current.runsSucceeded} AI answers${label}.${partial}`,
     preference: "scanCompleted",
     email: false,
   });
 
-  if (!previous) return alerts;
-  const prevScore = previous.overall.score;
-  const delta = scoreChange(current.overall.score, prevScore) ?? 0;
+  // Scans that checked different question sets are not compared.
+  if (!previous || !comparableScans(current, previous)) return alerts;
+  const prevScore = Math.round(previous.overall.score);
+  const delta = score - prevScore;
 
   if (previous.overall.mentionRate > 0 && current.overall.mentionRate === 0) {
     alerts.push({
       type: "visibility_lost",
       severity: "critical",
       title: "Your business disappeared from AI answers",
-      body: `${input.projectName} was not mentioned in any monitored answer this scan (previously ${previous.overall.mentionRate}%).`,
+      body: `${input.projectName} was not mentioned in any monitored answer this scan (previously ${Math.round(previous.overall.mentionRate)}%).`,
       preference: "visibilityDrops",
       email: true,
     });
-  } else if (prevScore > 0 && (prevScore - current.overall.score) / prevScore >= 0.1) {
+  } else if (prevScore > 0 && delta < 0 && -delta / prevScore >= 0.1) {
     alerts.push({
       type: "visibility_drop",
       severity: "warning",
       title: "AI visibility dropped",
-      body: `${input.projectName}'s score fell from ${Math.round(prevScore)} to ${score} (${delta} points).`,
+      body: `${input.projectName}'s score fell from ${prevScore} to ${score} (${delta} points).`,
       preference: "visibilityDrops",
       email: true,
     });
@@ -74,7 +78,7 @@ export function computeAlerts(input: {
       type: "score_change",
       severity: delta > 0 ? "success" : "info",
       title: delta > 0 ? "AI visibility improved" : "AI visibility changed",
-      body: `${input.projectName}'s score moved from ${Math.round(prevScore)} to ${score} (${delta > 0 ? "+" : ""}${delta} points).`,
+      body: `${input.projectName}'s score moved from ${prevScore} to ${score} (${delta > 0 ? "+" : ""}${delta} points).`,
       preference: "scoreChanges",
       email: false,
     });
@@ -83,14 +87,15 @@ export function computeAlerts(input: {
   for (const c of current.competitors) {
     const before = previous.competitors.find((p) => p.competitorId === c.competitorId);
     if (!before) continue;
-    const wasBehind = before.metrics.score <= previous.overall.score;
-    const nowAhead = c.metrics.score > current.overall.score;
+    const theirs = Math.round(c.metrics.score);
+    const wasBehind = Math.round(before.metrics.score) <= prevScore;
+    const nowAhead = theirs > score;
     if (wasBehind && nowAhead) {
       alerts.push({
         type: "competitor_overtake",
         severity: "warning",
         title: `${c.name} overtook you`,
-        body: `${c.name} now scores ${Math.round(c.metrics.score)} vs your ${score} in monitored AI answers.`,
+        body: `${c.name} now scores ${theirs} vs your ${score} in monitored AI answers.`,
         preference: "competitorOvertakes",
         email: true,
       });

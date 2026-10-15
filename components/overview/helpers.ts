@@ -4,6 +4,8 @@ import type { EntityMetrics, Priority, QuerySummary, ScanMetrics } from "@/types
 import type { ProjectOverviewData } from "./types";
 
 export const NOT_ENOUGH_DATA = "Not enough data to calculate this metric.";
+/** Shown instead of a change when one of the two scans checked only some questions. */
+export const NOT_COMPARED = "Not compared: different questions checked";
 export const TRUST_NOTE = "AI answers can vary between runs. Scores are based on the queries and providers monitored by your account.";
 export const METRIC_DISCLAIMER = "This is a proprietary monitoring metric, not a search-engine ranking.";
 

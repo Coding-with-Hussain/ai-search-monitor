@@ -7,6 +7,7 @@ import { getLatestCompletedScan, getPreviousCompletedScan, getScoreHistory } fro
 import { type Entitlements, getEntitlements } from "@/lib/billing/entitlements";
 import { validationError } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
+import { comparableScans } from "@/services/scans/coverage";
 import type { ReportSnapshot } from "@/types/report";
 
 import { computeScanInsights } from "./insights";
@@ -71,7 +72,10 @@ export async function buildReportSnapshot({
   }
   const history = inPeriod.map((h) => ({ date: h.date, score: Math.round(h.score * 10) / 10 }));
 
-  const { wins, problems } = computeScanInsights(latest.metrics, previous?.metrics ?? null);
+  // Scans that checked different question sets are not compared.
+  const comparable = comparableScans(latest.metrics, previous?.metrics);
+  const baseline = comparable ? (previous ?? null) : null;
+  const { wins, problems } = computeScanInsights(latest.metrics, baseline?.metrics ?? null);
   const company = profile?.company?.trim();
   const location = [project.city, project.country].filter(Boolean).join(", ");
 
@@ -89,7 +93,7 @@ export async function buildReportSnapshot({
     scanId: latest.id,
     metrics: latest.metrics,
     history,
-    previousScore: previous?.score != null ? Number(previous.score) : null,
+    previousScore: baseline?.score != null ? Number(baseline.score) : null,
     wins,
     problems,
     recommendations: recommendations.map((r) => ({ title: r.title, priority: r.priority, action: r.action, reason: r.reason })),

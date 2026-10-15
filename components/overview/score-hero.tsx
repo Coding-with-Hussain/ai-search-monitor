@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
 import { competitorInsight, strongestCompetitor } from "@/services/metrics/competitor-insights";
+import { comparableScans, coverageSentence } from "@/services/scans/coverage";
 import { scoreBand, scoreChange } from "@/services/scoring";
 
 import { CompetitorGapDialog } from "./competitor-gap-dialog";
@@ -27,7 +28,8 @@ const BAND_COPY = {
 export function ScoreHero({ data }: { data: ProjectOverviewData }) {
   const { metrics, previous } = data;
   const score = metrics.overall.score;
-  const change = scoreChange(score, previous?.overall.score);
+  const comparable = comparableScans(metrics, previous);
+  const change = comparable ? scoreChange(score, previous?.overall.score) : null;
   const band = BAND_COPY[scoreBand(score)];
   const cov = coverage(metrics);
 
@@ -48,10 +50,17 @@ export function ScoreHero({ data }: { data: ProjectOverviewData }) {
           <p className="mt-2.5">
             {change !== null ? (
               <Delta value={change} suffix=" pts" context="vs previous scan" className="text-sm [&_svg]:size-4" />
+            ) : previous ? (
+              <span className="text-sm text-subtle-foreground">Not compared with the previous scan: a different set of questions was checked</span>
             ) : (
               <span className="text-sm text-subtle-foreground">First completed scan, no previous scan yet</span>
             )}
           </p>
+          {metrics.coverage && (
+            <p className="mt-2 rounded-md bg-warning-soft px-2.5 py-1.5 text-[13px] text-warning-text">
+              Partial scan: {coverageSentence(metrics.coverage)}. The highest-priority questions were checked first.
+            </p>
+          )}
           <p className="mt-3 text-[13px] text-muted-foreground">{cov.text}</p>
           <p className="text-[13px] text-muted-foreground">Latest scan: {formatDate(data.scannedAt)}</p>
           <div className="mt-3">

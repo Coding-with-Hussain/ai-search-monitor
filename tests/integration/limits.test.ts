@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { db } from "@/db";
 import { getProjectForUser } from "@/db/repositories/projects";
-import { notifications, projects, usageRecords } from "@/db/schema";
+import { notifications, projects, scans, usageRecords } from "@/db/schema";
 import { getUsageSummary } from "@/lib/billing/entitlements";
 import { addCompetitor } from "@/services/projects/service";
 import { enqueueDueScans } from "@/services/scheduler";
@@ -54,6 +54,9 @@ describe.skipIf(!hasDatabase)("plan enforcement (server-side)", () => {
     expect(scan.queryCount).toBe(5);
     expect(scan.notes.join(" ")).toMatch(/remaining monthly queries/);
     await runScanToCompletion(scan.id);
+    // The scan is marked partial so it is never compared with full scans.
+    const [done] = await db().select().from(scans).where(eq(scans.id, scan.id));
+    expect(done.metrics?.coverage).toEqual({ checked: 5, active: 8, reason: "quota" });
   });
 
   it("blocks scans once the monthly quota is used", async () => {

@@ -106,7 +106,7 @@ export function computeScanInsights(
   if (firstPlace > 0) {
     wins.push({
       rank: 3,
-      text: `Recommended first in ${firstPlace} of ${pluralize(totalQuestions, "monitored question")} on at least one AI platform.`,
+      text: `Recommended first in ${firstPlace} of ${pluralize(totalQuestions, "checked question")} on at least one AI platform.`,
     });
   }
 
@@ -115,10 +115,10 @@ export function computeScanInsights(
   if (missing > 0) {
     problems.push({
       rank: 3,
-      text: `Not mentioned in any AI answer for ${missing} of ${pluralize(totalQuestions, "monitored question")}.`,
+      text: `Not mentioned in any AI answer for ${missing} of ${pluralize(totalQuestions, "checked question")}.`,
     });
   } else if (totalQuestions > 0) {
-    wins.push({ rank: 6, text: "Mentioned in at least one AI answer for every monitored question." });
+    wins.push({ rank: 6, text: "Mentioned in at least one AI answer for every question checked in this scan." });
   }
 
   // 6. Strongest and weakest AI platform.

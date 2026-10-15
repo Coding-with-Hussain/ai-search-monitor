@@ -10,6 +10,7 @@ export function Delta({
   invert = false,
   className,
   context,
+  emptyLabel = "No previous data",
 }: {
   value: number | null | undefined;
   suffix?: string;
@@ -17,9 +18,11 @@ export function Delta({
   invert?: boolean;
   className?: string;
   context?: string;
+  /** Shown when there is no change to display. */
+  emptyLabel?: string;
 }) {
   const text = formatDelta(value, suffix);
-  if (text === null) return <span className={cn("text-xs text-subtle-foreground", className)}>No previous data</span>;
+  if (text === null) return <span className={cn("text-xs text-subtle-foreground", className)}>{emptyLabel}</span>;
   const v = value ?? 0;
   const good = invert ? v < 0 : v > 0;
   const neutral = Math.abs(v) < 0.05;

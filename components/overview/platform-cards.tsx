@@ -6,6 +6,7 @@ import { InfoTip } from "@/components/dashboard/info-tip";
 import { Card } from "@/components/ui/card";
 import { formatNumber, formatPercent } from "@/lib/format";
 import { PROVIDER_META } from "@/lib/providers-meta";
+import { comparableScans } from "@/services/scans/coverage";
 import { scoreChange } from "@/services/scoring";
 import { PROVIDER_IDS, type ProviderId, type ProviderMetrics } from "@/types/domain";
 
@@ -29,6 +30,7 @@ export function PlatformCards({ data }: { data: ProjectOverviewData }) {
       </div>
       <ul className="grid gap-3 sm:gap-4 md:grid-cols-3">
         {PROVIDER_IDS.map((id) => {
+          const comparable = comparableScans(data.metrics, data.previous);
           const current = data.metrics.providers.find((p) => p.provider === id) ?? null;
           const previous = data.previous?.providers.find((p) => p.provider === id && p.status !== "unavailable") ?? null;
           return (
@@ -38,6 +40,7 @@ export function PlatformCards({ data }: { data: ProjectOverviewData }) {
                 current={current}
                 previous={previous}
                 hasPreviousScan={data.previous !== null}
+                comparable={comparable}
                 monitored={data.monitoredProviders.includes(id)}
                 reason={data.unavailableReasons[id] ?? null}
                 href={links.providerQueries(id)}
@@ -67,6 +70,7 @@ function PlatformCard({
   current,
   previous,
   hasPreviousScan,
+  comparable,
   monitored,
   reason,
   href,
@@ -76,6 +80,8 @@ function PlatformCard({
   current: ProviderMetrics | null;
   previous: ProviderMetrics | null;
   hasPreviousScan: boolean;
+  /** False when this or the previous scan checked only some questions. */
+  comparable: boolean;
   monitored: boolean;
   reason: "not_configured" | "no_results" | null;
   href: string | null;
@@ -123,7 +129,7 @@ function PlatformCard({
     );
   }
 
-  const change = previous ? scoreChange(current.score, previous.score) : null;
+  const change = previous && comparable ? scoreChange(current.score, previous.score) : null;
   return (
     <Card className="flex h-full flex-col p-4">
       <PlatformName id={id} />
@@ -133,7 +139,7 @@ function PlatformCard({
           <span className="text-sm font-normal text-muted-foreground">/100</span>
         </span>
         {hasPreviousScan ? (
-          <Delta value={change} suffix=" pts" context="vs previous scan" />
+          <Delta value={change} suffix=" pts" context="vs previous scan" emptyLabel={comparable ? undefined : "Not compared"} />
         ) : (
           <span className="text-xs text-subtle-foreground">No previous scan</span>
         )}

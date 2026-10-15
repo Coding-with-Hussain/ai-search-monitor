@@ -179,4 +179,16 @@ export interface ScanMetrics {
   runsSucceeded: number;
   runsFailed: number;
   unavailableProviders: ProviderId[];
+  /**
+   * Present when the scan checked only some of the active questions (monthly
+   * limit or per-scan safety cap). Such scans are not compared with others:
+   * a different question set would make the change meaningless.
+   */
+  coverage?: ScanCoverage;
+}
+
+export interface ScanCoverage {
+  checked: number;
+  active: number;
+  reason: "quota" | "cap";
 }

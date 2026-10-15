@@ -14,6 +14,7 @@ export function MetricCard({
   delta,
   deltaSuffix,
   invertDelta,
+  deltaEmptyLabel,
   help,
   footnote,
   className,
@@ -24,6 +25,8 @@ export function MetricCard({
   delta?: number | null;
   deltaSuffix?: string;
   invertDelta?: boolean;
+  /** Shown instead of a change when there is none to show (default "No previous data"). */
+  deltaEmptyLabel?: string;
   help?: React.ReactNode;
   footnote?: React.ReactNode;
   className?: string;
@@ -39,7 +42,7 @@ export function MetricCard({
         {suffix && <span className="text-sm text-muted-foreground">{suffix}</span>}
       </div>
       <div className="min-h-4">
-        {delta !== undefined ? <Delta value={delta} suffix={deltaSuffix} invert={invertDelta} context="vs previous" /> : footnote}
+        {delta !== undefined ? <Delta value={delta} suffix={deltaSuffix} invert={invertDelta} context="vs previous" emptyLabel={deltaEmptyLabel} /> : footnote}
       </div>
     </Card>
   );

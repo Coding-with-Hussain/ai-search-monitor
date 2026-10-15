@@ -26,6 +26,7 @@ const summaryColumns = {
   currentQuery: scans.currentQuery,
   score: scans.score,
   notes: scans.notes,
+  config: scans.config,
   error: scans.error,
   startedAt: scans.startedAt,
   completedAt: scans.completedAt,

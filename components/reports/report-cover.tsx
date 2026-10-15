@@ -6,6 +6,7 @@ import { Logo } from "@/components/brand/logo";
 import { Badge } from "@/components/ui/badge";
 import { extractDomain } from "@/lib/domain";
 import { formatDateTime, pluralize } from "@/lib/format";
+import { coverageSentence } from "@/services/scans/coverage";
 import type { ReportSnapshot } from "@/types/report";
 
 import { formatPeriod } from "./labels";
@@ -85,6 +86,12 @@ export function ReportCover({
             This report is based on simulated AI answers: no real AI assistant was queried. The analysis and scoring are
             real, but the results do not describe how AI assistants currently see this business.
           </span>
+        </p>
+      )}
+      {snapshot.metrics.coverage && (
+        <p className="mt-3 rounded-lg border border-warning/60 bg-warning-soft px-3 py-2.5 text-[13px] leading-relaxed text-warning-text">
+          Partial scan: {coverageSentence(snapshot.metrics.coverage)}. Results describe the questions that were checked
+          and are not compared with the previous scan.
         </p>
       )}
     </header>

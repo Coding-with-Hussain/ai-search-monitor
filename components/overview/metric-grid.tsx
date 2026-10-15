@@ -1,9 +1,10 @@
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { formatPercent, formatPosition } from "@/lib/format";
 
+import { comparableScans } from "@/services/scans/coverage";
 import { scoreChange } from "@/services/scoring";
 
-import { formatSignedPoints, NOT_ENOUGH_DATA, shownDiff } from "./helpers";
+import { formatSignedPoints, NOT_COMPARED, NOT_ENOUGH_DATA, shownDiff } from "./helpers";
 import type { ProjectOverviewData } from "./types";
 
 const notEnough = <span className="text-xs text-subtle-foreground">{NOT_ENOUGH_DATA}</span>;
@@ -11,7 +12,10 @@ const notEnough = <span className="text-xs text-subtle-foreground">{NOT_ENOUGH_D
 /** The seven headline metrics, with change vs the previous completed scan. */
 export function MetricGrid({ data }: { data: ProjectOverviewData }) {
   const o = data.metrics.overall;
-  const p = data.previous?.overall ?? null;
+  // Scans that checked different question sets are not compared.
+  const comparable = comparableScans(data.metrics, data.previous);
+  const p = comparable ? (data.previous?.overall ?? null) : null;
+  const deltaEmptyLabel = data.previous && !comparable ? NOT_COMPARED : undefined;
   const hasRuns = o.runs > 0;
   const gap = data.metrics.competitorGap;
   const prevGap = data.previous?.competitorGap ?? null;
@@ -35,6 +39,7 @@ export function MetricGrid({ data }: { data: ProjectOverviewData }) {
           suffix={hasRuns ? "/100" : undefined}
           delta={hasRuns ? (p ? scoreChange(o.score, p.score) : null) : undefined}
           deltaSuffix=" pts"
+          deltaEmptyLabel={deltaEmptyLabel}
           footnote={notEnough}
           help="Average score of every monitored AI answer (0–100), combining mentions, recommendations, position, citations and sentiment. A proprietary monitoring metric, not a search-engine ranking."
         />
@@ -43,6 +48,7 @@ export function MetricGrid({ data }: { data: ProjectOverviewData }) {
           value={hasRuns ? formatPercent(o.recommendationRate) : "—"}
           delta={hasRuns ? delta(o.recommendationRate, p?.recommendationRate) : undefined}
           deltaSuffix=" pts"
+          deltaEmptyLabel={deltaEmptyLabel}
           footnote={notEnough}
           help="Share of monitored AI answers that suggested your business as an option."
         />
@@ -51,6 +57,7 @@ export function MetricGrid({ data }: { data: ProjectOverviewData }) {
           value={hasRuns ? formatPercent(o.mentionRate) : "—"}
           delta={hasRuns ? delta(o.mentionRate, p?.mentionRate) : undefined}
           deltaSuffix=" pts"
+          deltaEmptyLabel={deltaEmptyLabel}
           footnote={notEnough}
           help="Share of monitored AI answers that named your business at all, recommended or not."
         />
@@ -59,6 +66,7 @@ export function MetricGrid({ data }: { data: ProjectOverviewData }) {
           value={o.averagePosition === null ? "—" : `#${formatPosition(o.averagePosition)}`}
           delta={o.averagePosition === null ? undefined : delta(o.averagePosition, p?.averagePosition, 1)}
           invertDelta
+          deltaEmptyLabel={deltaEmptyLabel}
           footnote={notEnough}
           help="Your average place in AI recommendation lists when you are recommended. Lower is better (#1 is the top spot)."
         />
@@ -67,6 +75,7 @@ export function MetricGrid({ data }: { data: ProjectOverviewData }) {
           value={hasRuns ? formatPercent(o.shareOfVoice) : "—"}
           delta={hasRuns ? delta(o.shareOfVoice, p?.shareOfVoice) : undefined}
           deltaSuffix=" pts"
+          deltaEmptyLabel={deltaEmptyLabel}
           footnote={notEnough}
           help="Your share of all business recommendations in monitored AI answers (you, competitors and other businesses)."
         />
@@ -75,6 +84,7 @@ export function MetricGrid({ data }: { data: ProjectOverviewData }) {
           value={hasRuns ? formatPercent(o.citationRate) : "—"}
           delta={hasRuns ? delta(o.citationRate, p?.citationRate) : undefined}
           deltaSuffix=" pts"
+          deltaEmptyLabel={deltaEmptyLabel}
           footnote={notEnough}
           help="Share of monitored AI answers that cited your own website as a source."
         />
@@ -85,6 +95,7 @@ export function MetricGrid({ data }: { data: ProjectOverviewData }) {
           suffix={gap ? `points vs ${gap.competitorName}` : undefined}
           delta={gap ? gapDelta : undefined}
           deltaSuffix=" pts"
+          deltaEmptyLabel={deltaEmptyLabel}
           footnote={
             gap ? (
               <span className="text-xs text-subtle-foreground">
