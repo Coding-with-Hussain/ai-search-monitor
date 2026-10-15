@@ -3,6 +3,6 @@
   "crons": [
     { "path": "/api/cron/scheduled-scans", "schedule": "*/15 * * * *" },
     { "path": "/api/cron/process-scans", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/weekly-reports", "schedule": "0 8 * * 1" }
+    { "path": "/api/cron/weekly-reports", "schedule": "0 8 * * *" }
   ]
 }

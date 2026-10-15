@@ -38,7 +38,7 @@ export const scheduledScansFunction = inngest.createFunction(
 );
 
 export const weeklyReportsFunction = inngest.createFunction(
-  { id: "weekly-reports", triggers: [{ cron: "0 8 * * 1" }] },
+  { id: "weekly-reports", triggers: [{ cron: "0 8 * * *" }] },
   async ({ step }) => step.run("send-weekly-reports", () => sendWeeklyReports()),
 );
 

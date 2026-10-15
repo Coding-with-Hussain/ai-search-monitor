@@ -13,10 +13,11 @@ export interface EmailMessage {
  * is not configured the message is logged (subject + recipient domain only)
  * and skipped, so development works without an email provider.
  */
-export async function sendEmail(message: EmailMessage): Promise<{ sent: boolean }> {
+/** `skipped`: email is not configured (expected in development) — not a failure to retry. */
+export async function sendEmail(message: EmailMessage): Promise<{ sent: boolean; skipped?: boolean }> {
   if (!features.email()) {
     logger.info("email.skipped_not_configured", { subject: message.subject, toDomain: message.to.split("@")[1] });
-    return { sent: false };
+    return { sent: false, skipped: true };
   }
   try {
     const res = await fetch("https://api.resend.com/emails", {

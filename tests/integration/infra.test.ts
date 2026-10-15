@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { db } from "@/db";
-import { projects, rateLimits, scans } from "@/db/schema";
+import { notifications, projects, rateLimits, scans } from "@/db/schema";
 import { rateLimit } from "@/lib/rate-limit";
-import { enqueueDueScans, processPendingScans } from "@/services/scheduler";
+import { enqueueDueScans, processPendingScans, sendWeeklyReports } from "@/services/scheduler";
 
 import { cleanupUsers, createTestProject, createTestUser, hasDatabase } from "./helpers";
 
@@ -46,5 +46,15 @@ describe.skipIf(!hasDatabase)("scheduler", () => {
     expect(done.status).toBe("completed");
     const [p] = await db().select().from(projects).where(eq(projects.id, projectId));
     expect(p.nextScanAt!.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("creates at most one weekly report per project per week", async () => {
+    await sendWeeklyReports(20_000);
+    await sendWeeklyReports(20_000);
+    const markers = await db()
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.projectId, projectId), eq(notifications.type, "weekly_report")));
+    expect(markers).toHaveLength(1);
   });
 });

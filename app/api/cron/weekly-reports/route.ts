@@ -5,7 +5,7 @@ import { sendWeeklyReports } from "@/services/scheduler";
 
 export const maxDuration = 60;
 
-/** Weekly "Your AI visibility report is ready" emails (idempotent per week). */
+/** "Your AI visibility report is ready" emails: runs daily, each project gets at most one per week. */
 export async function GET(request: Request) {
   const rejected = verifyCronRequest(request);
   if (rejected) return rejected;
