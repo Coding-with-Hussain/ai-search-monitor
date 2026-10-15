@@ -70,7 +70,11 @@ export const llmAnalysisSchema = z.object({
     recommended: z.boolean(),
     position: z.number().int().min(1).max(50).nullable(),
     sentiment: sentimentSchema.nullable(),
-    evidence: z.string().max(600).nullable(),
+    // Over-long fields are trimmed rather than rejected: a rejection costs a paid retry.
+    evidence: z
+      .string()
+      .transform((v) => v.slice(0, 600))
+      .nullable(),
   }),
   competitors: z
     .array(
@@ -85,9 +89,9 @@ export const llmAnalysisSchema = z.object({
     .default([]),
   other_businesses: z
     .array(z.object({ name: z.string().min(1).max(120), position: z.number().int().min(1).max(50).nullable() }))
-    .max(25)
-    .default([]),
-  explanation: z.string().max(600),
+    .default([])
+    .transform((list) => list.slice(0, 25)),
+  explanation: z.string().transform((v) => v.slice(0, 600)),
   confidence: z.number().min(0).max(1),
 });
 

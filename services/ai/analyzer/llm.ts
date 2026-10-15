@@ -214,13 +214,34 @@ export async function analyzeWithLlm(
   const prompt = buildAnalysisPrompt(input);
   let cost = 0;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const out = await complete(prompt);
+    let out: Awaited<ReturnType<LlmCompletion>>;
+    try {
+      out = await complete(prompt);
+    } catch (error) {
+      throw new LlmAnalysisError((error as Error).message, cost);
+    }
     cost += estimateCost(out.model, out.inputTokens, out.outputTokens);
     const parsed = parseLlmJson(out.text);
     if (parsed) {
-      return { result: reconcile(parsed, heuristic, input), model: out.model, estimatedCostUsd: cost };
+      try {
+        return { result: reconcile(parsed, heuristic, input), model: out.model, estimatedCostUsd: cost };
+      } catch (error) {
+        logger.warn("analysis.reconcile_failed", { attempt, error: (error as Error).message });
+        continue;
+      }
     }
     logger.warn("analysis.invalid_llm_output", { attempt, model: out.model, sample: out.text.slice(0, 200) });
   }
-  throw new Error("LLM analysis returned invalid output after retries");
+  throw new LlmAnalysisError("LLM analysis returned invalid output after retries", cost);
+}
+
+/** Carries what the failed attempts cost, so the spend is still recorded. */
+export class LlmAnalysisError extends Error {
+  constructor(
+    message: string,
+    readonly estimatedCostUsd: number,
+  ) {
+    super(message);
+    this.name = "LlmAnalysisError";
+  }
 }

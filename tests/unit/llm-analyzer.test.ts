@@ -86,4 +86,21 @@ describe("LLM analyzer (never trusted blindly)", () => {
     expect(out.analyzer).toBe("heuristic");
     expect(complete).not.toHaveBeenCalled();
   });
+
+  it("still records what failed analysis attempts cost", async () => {
+    const fn = vi.fn().mockResolvedValue({ text: "not json", model: "gpt-5-mini", inputTokens: 1000, outputTokens: 500 });
+    const out = await analyzeResponse(input(NUMBERED_LIST), { isMock: false, completion: fn as unknown as LlmCompletion });
+    expect(out.analyzer).toBe("heuristic");
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(out.estimatedCostUsd).toBeGreaterThan(0);
+  });
+
+  it("trims over-long model output instead of rejecting it", async () => {
+    const many = Array.from({ length: 40 }, (_, i) => ({ name: `Clinic ${i + 1}`, position: null }));
+    const complete = completionReturning(llmJson({ other_businesses: many, explanation: "x".repeat(900) }));
+    const out = await analyzeWithLlm(input(NUMBERED_LIST), analyzeHeuristically(input(NUMBERED_LIST)), complete);
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(out.result.explanation.length).toBeLessThanOrEqual(600);
+  });
 });
+

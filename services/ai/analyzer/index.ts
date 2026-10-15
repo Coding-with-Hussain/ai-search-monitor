@@ -2,7 +2,7 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 
 import { type AnalyzeInput, analyzeHeuristically } from "./heuristic";
-import { analyzeWithLlm, type LlmCompletion, openAiCompletion } from "./llm";
+import { analyzeWithLlm, LlmAnalysisError, type LlmCompletion, openAiCompletion } from "./llm";
 import { type AnalysisResult, analysisResultSchema } from "./schema";
 
 export type { AnalyzeInput } from "./heuristic";
@@ -50,6 +50,8 @@ export async function analyzeResponse(input: AnalyzeInput, options: AnalyzeOptio
     return { result: outcome.result, analyzer: "llm", analyzerModel: outcome.model, estimatedCostUsd: outcome.estimatedCostUsd };
   } catch (error) {
     logger.warn("analysis.llm_failed_fallback", { error: (error as Error).message });
-    return { result: heuristic, analyzer: "heuristic", analyzerModel: null, estimatedCostUsd: 0 };
+    // Failed attempts were still paid for.
+    const spent = error instanceof LlmAnalysisError ? error.estimatedCostUsd : 0;
+    return { result: heuristic, analyzer: "heuristic", analyzerModel: null, estimatedCostUsd: spent };
   }
 }
