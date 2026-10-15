@@ -23,6 +23,8 @@ CREATE BUSINESS → GENERATE BUYER QUESTIONS → RUN AI ANALYSIS → DETECT MENT
 - [Stripe setup](#stripe-setup)
 - [AI provider setup](#ai-provider-setup)
 - [Simulation (mock) mode](#simulation-mock-mode)
+- [Free AI visibility checker](#free-ai-visibility-checker)
+- [Development tools](#development-tools)
 - [Architecture](#architecture)
 - [Database](#database)
 - [Scoring model](#scoring-model)
@@ -127,6 +129,7 @@ All variables are documented in [`.env.example`](.env.example). Summary:
 | `DATABASE_URL` | yes | Postgres connection for the server (use the pooler URL in production) |
 | `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` | for billing | Stripe |
 | `STRIPE_PRICE_<PLAN>_<MONTHLY\|YEARLY>` | optional | Explicit price IDs (otherwise lookup keys) |
+| `STRIPE_PORTAL_CONFIGURATION_ID` | optional | Customer Portal configuration (`npm run stripe:setup` prints one) |
 | `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_WEB_SEARCH` | for live ChatGPT | OpenAI Responses API |
 | `GOOGLE_AI_API_KEY`, `GEMINI_MODEL` | for live Gemini | Gemini API with Google Search grounding |
 | `PERPLEXITY_API_KEY`, `PERPLEXITY_MODEL` | for live Perplexity | Perplexity Sonar API |
@@ -139,6 +142,7 @@ All variables are documented in [`.env.example`](.env.example). Summary:
 | `RESEND_API_KEY`, `EMAIL_FROM` | optional | Weekly reports and alerts |
 | `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST` | optional | Product analytics |
 | `ENABLE_DEV_TOOLS`, `LOG_LEVEL` | optional | Dev tools in production (admins only), log level |
+| `DATABASE_POOL_MAX` | optional | Postgres pool size per server instance (default 5) |
 
 Server configuration is validated with Zod on first use (`lib/env.ts`). Secrets are only read on the server; nothing secret uses the `NEXT_PUBLIC_` prefix.
 
@@ -148,8 +152,14 @@ Server configuration is validated with Zod on first use (`lib/env.ts`). Secrets 
 2. **API keys** — Project Settings → API: copy the URL and anon (publishable) key into `NEXT_PUBLIC_SUPABASE_*`, and the service role key into `SUPABASE_SERVICE_ROLE_KEY`.
 3. **Database URL** — Connect → *Transaction pooler* (port 6543) into `DATABASE_URL` for production. The client uses `prepare: false`, which the pooler requires.
 4. **Migrations** — `npm run setup -- --remote` (or `supabase link && supabase db push`). Both tools share the `supabase_migrations.schema_migrations` table, so they can be mixed.
-5. **Auth settings** — Authentication → URL configuration: set *Site URL* to your app URL and add `https://<your-domain>/auth/callback` to the redirect allow list. Enable *Confirm email* in production. Optionally customize email templates; the token‑hash flow is handled at `/auth/confirm`.
-6. **Seed (optional, non‑production)** — `npm run seed` creates `demo@aivisibility.dev`.
+5. **Auth settings** — Authentication → URL configuration: set *Site URL* to your app URL and add `https://<your-domain>/auth/callback` and `https://<your-domain>/auth/confirm` to the redirect allow list. Enable *Confirm email* in production.
+6. **Email templates (recommended)** — the default templates use the PKCE `/auth/callback` link, which only works in the browser that requested it. To make links work on any device, point the templates at the token‑hash route:
+   - Confirm signup: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/onboarding`
+   - Magic link: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/dashboard`
+   - Reset password: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password`
+
+   `next` is restricted to same‑site paths.
+7. **Seed (optional, non‑production)** — `npm run seed` creates `demo@aivisibility.dev` / `demo-password-123` with a six‑week simulated history. It refuses to run against a production `NODE_ENV`.
 
 New users automatically get a profile and a 14‑day Starter trial via the `on_auth_user_created` trigger.
 
@@ -179,6 +189,17 @@ Answers are analyzed by a deterministic analyzer; with `OPENAI_API_KEY` (and `AN
 `AI_VISIBILITY_MOCK_MODE=true` (the default) replaces provider calls with `MockProvider` (`services/ai/providers/mock.ts`), which builds realistic, **deterministic** answers (ranked lists, rationales, citations) from the business, competitors and a seed. Everything downstream — analysis, scoring, competitor metrics, recommendations, alerts — is the real production code.
 
 Simulated data is always labeled: scans store `mode = 'mock'`, runs store `is_mock = true`, the UI shows **Simulation** / **Demo data** badges, and reports and emails say so. The demo project created by `npm run seed` is flagged `is_demo`.
+
+## Free AI visibility checker
+
+`/free-ai-visibility-check` lets anonymous visitors try the product: a business name, website and a few details produce a small check (3 buyer questions) with a preview score, the competitors AI named instead, and a CTA to start monitoring. Abuse controls:
+
+- Simulated by default (`FREE_CHECK_LIVE=false`) and labeled as such. In live mode it runs **one** provider × 3 questions with the heuristic analyzer only.
+- Per‑IP rate limit (IP addresses are stored only as a daily‑salted SHA‑256 hash), a hidden honeypot field, and a global daily cap (`FREE_CHECK_DAILY_LIMIT`) after which the checker politely declines until the next day.
+
+## Development tools
+
+`/admin` (development only by default) provides: trigger a scan (simulated or live), generate questions, seed a demo project, inspect a single provider's raw normalized output, run the analyzer on any text (heuristic and LLM side by side), recalculate a scan's score, switch your own plan/status/trial, and run the scheduler once. Every tool is a server action that re‑checks the guard and only touches the signed‑in user's own data. In production the page and actions return 404/403 unless `ENABLE_DEV_TOOLS=true` **and** the user has `profiles.is_admin = true`; plan overrides are always disabled in production.
 
 ## Architecture
 
@@ -257,6 +278,7 @@ Not mentioned = 0. Project, provider and competitor scores are averages of answe
 
 - **Default (no extra infrastructure):** a scan created from the UI is processed in‑process after the response with `after()`. `GET /api/cron/process-scans` resumes anything that stopped early (deploys, timeouts).
 - **Scheduled monitoring:** `GET /api/cron/scheduled-scans` creates scans for projects whose `next_scan_at` is due (daily/weekly/monthly) and starts processing; `GET /api/cron/weekly-reports` sends weekly emails. `vercel.json` schedules these with Vercel Cron; any scheduler can call them with `Authorization: Bearer $CRON_SECRET`.
+- **Vercel plan note:** the bundled `vercel.json` runs the scan worker every 5 minutes and the scheduler every 15 minutes, which needs Vercel Pro. On Hobby (daily crons only) change both schedules to once a day and rely on `after()` for user‑started scans, or use Inngest or an external scheduler (GitHub Actions, cron‑job.org) to call the endpoints more often.
 - **Inngest (optional):** set `INNGEST_EVENT_KEY`/`INNGEST_SIGNING_KEY` and scans are sent as `scan/requested` events to durable step functions (`lib/jobs/inngest.ts`, served at `/api/inngest`), with Inngest crons for scheduling and weekly reports.
 
 ## Security
