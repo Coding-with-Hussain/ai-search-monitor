@@ -7,6 +7,8 @@ import * as schema from "./schema";
 import { createDb } from "./create";
 
 export type Database = PostgresJsDatabase<typeof schema>;
+/** The client or an open transaction — for helpers that must run inside a caller's transaction. */
+export type DbExecutor = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 const globalForDb = globalThis as unknown as {
   __aivmSql?: postgres.Sql;

@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, lt, notInArray, or, sql } from "drizzle-orm";
 
-import { db } from "@/db";
+import { db, type DbExecutor } from "@/db";
 import {
   type AuthorizedProject,
   computeNextScanAt,
@@ -21,7 +21,7 @@ import {
   sources,
   usageRecords,
 } from "@/db/schema";
-import { assertActive, remainingQueries } from "@/lib/billing/entitlements";
+import { assertActive, remainingQueries, withEntitlementLock } from "@/lib/billing/entitlements";
 import { domainMatches } from "@/lib/domain";
 import { env } from "@/lib/env";
 import { AppError, conflict, planLimitError, validationError } from "@/lib/errors";
@@ -69,8 +69,8 @@ export interface CreateScanOptions {
   createdAt?: Date;
 }
 
-export async function getActiveScan(projectId: string) {
-  const rows = await db()
+async function getActiveScan(projectId: string, executor: DbExecutor) {
+  const rows = await executor
     .select()
     .from(scans)
     .where(and(eq(scans.projectId, projectId), inArray(scans.status, ["queued", "running"])))
@@ -79,116 +79,133 @@ export async function getActiveScan(projectId: string) {
   return rows[0] ?? null;
 }
 
+/** Postgres unique violation on the one-active-scan-per-project index. */
+function isActiveScanConflict(error: unknown) {
+  const e = error as { code?: string; constraint_name?: string; cause?: { code?: string; constraint_name?: string } };
+  const pg = e?.code ? e : e?.cause;
+  return pg?.code === "23505" && pg.constraint_name === "scans_one_active_per_project";
+}
+
 export async function createScan(opts: CreateScanOptions): Promise<Scan> {
   const { project, userId, trigger } = opts;
   const log = { projectId: project.id, trigger };
-
-  // 1. Project is already authorized & loaded. Guard against parallel scans.
-  const active = await getActiveScan(project.id);
-  if (active) {
-    const stale = active.heartbeatAt && Date.now() - active.heartbeatAt.getTime() > 30 * 60_000;
-    if (!stale) throw conflict("A scan is already running for this project.");
-    await db().update(scans).set({ status: "failed", error: "Scan timed out." }).where(eq(scans.id, active.id));
-  }
-
-  // 2. Active queries, most important first.
-  const priorityOrder = sql`case ${queriesTable.priority} when 'high' then 0 when 'medium' then 1 else 2 end`;
-  let activeQueries = await db()
-    .select()
-    .from(queriesTable)
-    .where(and(eq(queriesTable.projectId, project.id), eq(queriesTable.status, "active")))
-    .orderBy(priorityOrder, asc(queriesTable.createdAt));
-  if (activeQueries.length === 0) {
-    throw validationError("Add or generate at least one active question before running a scan.");
-  }
-
-  const providers = project.providers.filter((p): p is ProviderId => (PROVIDER_IDS as readonly string[]).includes(p));
-  if (providers.length === 0) throw validationError("Enable at least one AI platform for this project.");
-
-  const notes: string[] = [];
-
-  // 3. Usage limits (monthly queries) — enforced on the server.
-  if (!opts.skipEntitlements) {
-    const { remaining, limit, used, ent } = await remainingQueries(userId);
-    assertActive(ent);
-    if (remaining <= 0) {
-      throw planLimitError(`You've used ${used}/${limit} queries this month. Upgrade your plan to keep monitoring.`, {
-        limit: "queries",
-        used,
-        max: limit,
-        plan: ent.plan.id,
-      });
-    }
-    if (activeQueries.length > remaining) {
-      notes.push(
-        `Limited to your ${remaining} remaining monthly queries (of ${activeQueries.length} active). Highest-priority questions were checked first.`,
-      );
-      activeQueries = activeQueries.slice(0, remaining);
-    }
-  }
-
-  // Cost guard: hard cap on provider calls per scan.
-  const maxCalls = env().MAX_PROVIDER_CALLS_PER_SCAN;
-  if (activeQueries.length * providers.length > maxCalls) {
-    const allowed = Math.max(1, Math.floor(maxCalls / providers.length));
-    notes.push(`Limited to ${allowed} questions by the per-scan safety cap.`);
-    activeQueries = activeQueries.slice(0, allowed);
-  }
-
   const mode: ScanMode = opts.mode ?? currentScanMode();
   const createdAt = opts.createdAt ?? new Date();
 
-  const scan = await db().transaction(async (tx) => {
-    const [created] = await tx
-      .insert(scans)
-      .values({
-        projectId: project.id,
-        userId,
-        status: "queued",
-        trigger,
-        mode,
-        providers,
-        queryCount: activeQueries.length,
-        totalItems: activeQueries.length * providers.length,
-        notes,
-        config: opts.mockStrength !== undefined ? { mockStrength: opts.mockStrength } : {},
-        createdAt,
-      })
-      .returning();
+  // Checks and inserts run under the account's entitlement lock so parallel
+  // requests cannot start duplicate scans or overspend the monthly quota.
+  // Quotas belong to the project owner (the paying account).
+  const run = () =>
+    withEntitlementLock(project.userId, async (tx) => {
+      // 1. Project is already authorized & loaded. Guard against parallel scans.
+      const active = await getActiveScan(project.id, tx);
+      if (active) {
+        const stale = active.heartbeatAt && Date.now() - active.heartbeatAt.getTime() > 30 * 60_000;
+        if (!stale) throw conflict("A scan is already running for this project.");
+        await tx.update(scans).set({ status: "failed", error: "Scan timed out." }).where(eq(scans.id, active.id));
+      }
 
-    const runRows = activeQueries.flatMap((q) =>
-      providers.map((provider) => ({
-        scanId: created.id,
-        projectId: project.id,
-        queryId: q.id,
-        provider,
-        queryText: q.text,
-        status: "pending" as const,
-        isMock: mode === "mock",
-        createdAt,
-      })),
-    );
-    for (let i = 0; i < runRows.length; i += 500) {
-      await tx.insert(aiRuns).values(runRows.slice(i, i + 500));
-    }
+      // 2. Active queries, most important first.
+      const priorityOrder = sql`case ${queriesTable.priority} when 'high' then 0 when 'medium' then 1 else 2 end`;
+      let activeQueries = await tx
+        .select()
+        .from(queriesTable)
+        .where(and(eq(queriesTable.projectId, project.id), eq(queriesTable.status, "active")))
+        .orderBy(priorityOrder, asc(queriesTable.createdAt));
+      if (activeQueries.length === 0) {
+        throw validationError("Add or generate at least one active question before running a scan.");
+      }
 
-    // Seeded demo history is not real usage and never counts against quotas.
-    if (trigger !== "seed") {
-      await tx.insert(usageRecords).values({
-        userId: project.userId,
-        projectId: project.id,
-        scanId: created.id,
-        kind: "query_run",
-        quantity: activeQueries.length,
-        metadata: { trigger, mode, providers },
-        createdAt,
-      });
-    }
-    return created;
-  });
+      const providers = project.providers.filter((p): p is ProviderId => (PROVIDER_IDS as readonly string[]).includes(p));
+      if (providers.length === 0) throw validationError("Enable at least one AI platform for this project.");
 
-  logger.info("scan.created", { ...log, scanId: scan.id, mode, queries: activeQueries.length, providers });
-  return scan;
+      const notes: string[] = [];
+
+      // 3. Usage limits (monthly queries) — enforced on the server.
+      if (!opts.skipEntitlements) {
+        const { remaining, limit, used, ent } = await remainingQueries(project.userId, undefined, tx);
+        assertActive(ent);
+        if (remaining <= 0) {
+          throw planLimitError(`You've used ${used}/${limit} queries this month. Upgrade your plan to keep monitoring.`, {
+            limit: "queries",
+            used,
+            max: limit,
+            plan: ent.plan.id,
+          });
+        }
+        if (activeQueries.length > remaining) {
+          notes.push(
+            `Limited to your ${remaining} remaining monthly queries (of ${activeQueries.length} active). Highest-priority questions were checked first.`,
+          );
+          activeQueries = activeQueries.slice(0, remaining);
+        }
+      }
+
+      // Cost guard: hard cap on provider calls per scan.
+      const maxCalls = env().MAX_PROVIDER_CALLS_PER_SCAN;
+      if (activeQueries.length * providers.length > maxCalls) {
+        const allowed = Math.max(1, Math.floor(maxCalls / providers.length));
+        notes.push(`Limited to ${allowed} questions by the per-scan safety cap.`);
+        activeQueries = activeQueries.slice(0, allowed);
+      }
+
+      const [created] = await tx
+        .insert(scans)
+        .values({
+          projectId: project.id,
+          userId,
+          status: "queued",
+          trigger,
+          mode,
+          providers,
+          queryCount: activeQueries.length,
+          totalItems: activeQueries.length * providers.length,
+          notes,
+          config: opts.mockStrength !== undefined ? { mockStrength: opts.mockStrength } : {},
+          createdAt,
+        })
+        .returning();
+
+      const runRows = activeQueries.flatMap((q) =>
+        providers.map((provider) => ({
+          scanId: created.id,
+          projectId: project.id,
+          queryId: q.id,
+          provider,
+          queryText: q.text,
+          status: "pending" as const,
+          isMock: mode === "mock",
+          createdAt,
+        })),
+      );
+      for (let i = 0; i < runRows.length; i += 500) {
+        await tx.insert(aiRuns).values(runRows.slice(i, i + 500));
+      }
+
+      // Seeded demo history is not real usage and never counts against quotas.
+      if (trigger !== "seed") {
+        await tx.insert(usageRecords).values({
+          userId: project.userId,
+          projectId: project.id,
+          scanId: created.id,
+          kind: "query_run",
+          quantity: activeQueries.length,
+          metadata: { trigger, mode, providers },
+          createdAt,
+        });
+      }
+      return { scan: created, queries: activeQueries.length, providers };
+    });
+
+  try {
+    const { scan, queries, providers } = await run();
+    logger.info("scan.created", { ...log, scanId: scan.id, mode, queries, providers });
+    return scan;
+  } catch (error) {
+    // Backstop for writers outside this account's lock (e.g. organization members).
+    if (isActiveScanConflict(error)) throw conflict("A scan is already running for this project.");
+    throw error;
+  }
 }
 
 /** Atomically claim up to `limit` runs for processing. */

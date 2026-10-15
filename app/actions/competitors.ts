@@ -21,7 +21,7 @@ export async function addCompetitorAction(input: z.input<typeof addInput>) {
     const data = addInput.parse(input);
     const project = await getProjectForUser(user.id, data.projectId);
     assertActive(await getEntitlements(user.id));
-    const row = await addCompetitor(user.id, project, { name: data.name, website: data.website });
+    const row = await addCompetitor(project, { name: data.name, website: data.website });
     logger.info("competitor.added", { projectId: project.id, competitorId: row.id });
     revalidatePath(`/projects/${project.id}`, "layout");
     return { id: row.id, name: row.name };

@@ -11,7 +11,7 @@ import {
 } from "@/db/repositories/projects";
 import { insertQueries, listQueryTexts } from "@/db/repositories/queries";
 import { competitors, projects } from "@/db/schema";
-import { assertCanAddCompetitors, assertCanCreateProject, getEntitlements } from "@/lib/billing/entitlements";
+import { assertCanAddCompetitors, assertCanCreateProject, getEntitlements, withEntitlementLock } from "@/lib/billing/entitlements";
 import { getPlan } from "@/lib/billing/plans";
 import { extractDomain, normalizeWebsite } from "@/lib/domain";
 import { conflict, planLimitError, validationError } from "@/lib/errors";
@@ -41,24 +41,26 @@ export async function createProjectWithSetup(
   data: CreateProjectData,
   opts: { isDemo?: boolean; skipEntitlements?: boolean } = {},
 ): Promise<AuthorizedProject> {
-  if (!opts.skipEntitlements) {
-    const ent = await assertCanCreateProject(userId);
-    const max = ent.plan.limits.competitorsPerProject;
-    if (max !== null && data.competitors.length > max) {
-      throw planLimitError(`Your ${ent.plan.name} plan allows ${max} competitors per project. Remove some or upgrade.`, {
-        limit: "competitors",
-        used: data.competitors.length,
-        max,
-        plan: ent.plan.id,
-      });
-    }
-    assertFrequencyAllowed(ent.plan.id, data.monitoring.frequency);
-  }
-
   const website = normalizeWebsite(data.website);
   const uniqueCompetitors = dedupeCompetitors(data.competitors);
 
-  const project = await db().transaction(async (tx) => {
+  // The project-count check and the insert share the account lock, so parallel
+  // submissions cannot create more projects than the plan allows.
+  const project = await withEntitlementLock(userId, async (tx) => {
+    if (!opts.skipEntitlements) {
+      const ent = await assertCanCreateProject(userId, tx);
+      const max = ent.plan.limits.competitorsPerProject;
+      if (max !== null && uniqueCompetitors.length > max) {
+        throw planLimitError(`Your ${ent.plan.name} plan allows ${max} competitors per project. Remove some or upgrade.`, {
+          limit: "competitors",
+          used: uniqueCompetitors.length,
+          max,
+          plan: ent.plan.id,
+        });
+      }
+      assertFrequencyAllowed(ent.plan.id, data.monitoring.frequency);
+    }
+
     const [created] = await tx
       .insert(projects)
       .values({
@@ -148,21 +150,25 @@ export async function updateProjectSettings(userId: string, project: AuthorizedP
     .where(eq(projects.id, project.id));
 }
 
-export async function addCompetitor(userId: string, project: AuthorizedProject, input: CompetitorInput) {
-  await assertCanAddCompetitors(userId, project.id, 1);
-  const existing = await listCompetitors(project);
-  if (existing.some((c) => c.name.toLowerCase() === input.name.trim().toLowerCase())) {
-    throw conflict(`${input.name} is already being tracked.`);
-  }
-  if (input.name.trim().toLowerCase() === project.name.toLowerCase()) {
+export async function addCompetitor(project: AuthorizedProject, input: CompetitorInput) {
+  const name = input.name.trim();
+  if (name.toLowerCase() === project.name.toLowerCase()) {
     throw validationError("A competitor can't have the same name as your business.");
   }
   const site = normalizeWebsite(input.website);
-  const [row] = await db()
-    .insert(competitors)
-    .values({ projectId: project.id, name: input.name.trim(), website: site, domain: extractDomain(site) })
-    .returning();
-  return row;
+  // Competitor limits belong to the project owner's plan; check and insert under its lock.
+  return withEntitlementLock(project.userId, async (tx) => {
+    await assertCanAddCompetitors(project.userId, project.id, 1, tx);
+    const existing = await tx.select({ name: competitors.name }).from(competitors).where(eq(competitors.projectId, project.id));
+    if (existing.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
+      throw conflict(`${name} is already being tracked.`);
+    }
+    const [row] = await tx
+      .insert(competitors)
+      .values({ projectId: project.id, name, website: site, domain: extractDomain(site) })
+      .returning();
+    return row;
+  });
 }
 
 export async function removeCompetitor(project: AuthorizedProject, competitorId: string) {

@@ -1,6 +1,6 @@
 import { and, count, eq, gte, sql } from "drizzle-orm";
 
-import { db } from "@/db";
+import { db, type DbExecutor } from "@/db";
 import { competitors, projects, subscriptions, usageRecords } from "@/db/schema";
 import { AppError, planLimitError } from "@/lib/errors";
 
@@ -124,13 +124,26 @@ export function resolveEntitlements(
   };
 }
 
-export async function getEntitlements(userId: string): Promise<Entitlements> {
-  const rows = await db().select().from(subscriptions).where(eq(subscriptions.userId, userId)).limit(1);
+export async function getEntitlements(userId: string, executor: DbExecutor = db()): Promise<Entitlements> {
+  const rows = await executor.select().from(subscriptions).where(eq(subscriptions.userId, userId)).limit(1);
   return resolveEntitlements(rows[0] ?? null);
 }
 
-export async function getQueriesUsed(userId: string, since: Date) {
-  const [row] = await db()
+/**
+ * Run `fn` in a transaction that holds a per-account advisory lock. Limit
+ * checks and the inserts they guard must both happen inside `fn` (using `tx`),
+ * so concurrent requests from one account cannot all pass a check and exceed
+ * the plan together. The lock is released when the transaction ends.
+ */
+export async function withEntitlementLock<T>(accountId: string, fn: (tx: DbExecutor) => Promise<T>): Promise<T> {
+  return db().transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`entitlements:${accountId}`}, 0))`);
+    return fn(tx);
+  });
+}
+
+export async function getQueriesUsed(userId: string, since: Date, executor: DbExecutor = db()) {
+  const [row] = await executor
     .select({ total: sql<number>`coalesce(sum(${usageRecords.quantity}), 0)::int` })
     .from(usageRecords)
     .where(and(eq(usageRecords.userId, userId), eq(usageRecords.kind, "query_run"), gte(usageRecords.createdAt, since)));
@@ -166,10 +179,10 @@ export function assertActive(ent: Entitlements) {
   }
 }
 
-export async function assertCanCreateProject(userId: string) {
-  const ent = await getEntitlements(userId);
+export async function assertCanCreateProject(userId: string, executor: DbExecutor = db()) {
+  const ent = await getEntitlements(userId, executor);
   assertActive(ent);
-  const [row] = await db().select({ n: count() }).from(projects).where(eq(projects.userId, userId));
+  const [row] = await executor.select({ n: count() }).from(projects).where(eq(projects.userId, userId));
   const used = Number(row?.n ?? 0);
   const max = ent.plan.limits.projects;
   if (used >= max) {
@@ -181,11 +194,11 @@ export async function assertCanCreateProject(userId: string) {
   return ent;
 }
 
-export async function assertCanAddCompetitors(userId: string, projectId: string, adding: number) {
-  const ent = await getEntitlements(userId);
+export async function assertCanAddCompetitors(userId: string, projectId: string, adding: number, executor: DbExecutor = db()) {
+  const ent = await getEntitlements(userId, executor);
   const max = ent.plan.limits.competitorsPerProject;
   if (max === null) return ent;
-  const [row] = await db().select({ n: count() }).from(competitors).where(eq(competitors.projectId, projectId));
+  const [row] = await executor.select({ n: count() }).from(competitors).where(eq(competitors.projectId, projectId));
   const used = Number(row?.n ?? 0);
   if (used + adding > max) {
     throw planLimitError(
@@ -197,8 +210,8 @@ export async function assertCanAddCompetitors(userId: string, projectId: string,
 }
 
 /** Remaining monthly queries (never negative). */
-export async function remainingQueries(userId: string, ent?: Entitlements) {
-  const e = ent ?? (await getEntitlements(userId));
-  const used = await getQueriesUsed(userId, e.periodStart);
+export async function remainingQueries(userId: string, ent?: Entitlements, executor: DbExecutor = db()) {
+  const e = ent ?? (await getEntitlements(userId, executor));
+  const used = await getQueriesUsed(userId, e.periodStart, executor);
   return { used, limit: e.plan.limits.queriesPerMonth, remaining: Math.max(0, e.plan.limits.queriesPerMonth - used), ent: e };
 }
