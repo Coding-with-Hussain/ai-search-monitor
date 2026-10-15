@@ -19,3 +19,10 @@ create table if not exists auth.users (
 create or replace function auth.uid() returns uuid
 language sql stable
 as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+
+-- Supabase grants the API roles full table privileges by default (RLS then
+-- decides). Mirror that so tests exercise the same privileges as production.
+grant usage on schema public to anon, authenticated, service_role;
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
