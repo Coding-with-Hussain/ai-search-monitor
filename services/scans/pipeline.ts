@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, lt, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 
 import { db, type DbExecutor } from "@/db";
 import {
@@ -13,6 +13,7 @@ import {
   aiAnalysis,
   aiRuns,
   type AiRun,
+  competitors as competitorsTable,
   notifications,
   projects,
   queries as queriesTable,
@@ -29,7 +30,7 @@ import { AppError, conflict, planLimitError, validationError } from "@/lib/error
 import { logger } from "@/lib/logger";
 import { analyzeResponse } from "@/services/ai/analyzer";
 import { currentScanMode, getProvider } from "@/services/ai/providers/registry";
-import { ProviderUnavailableError } from "@/services/ai/providers/types";
+import { type ProviderResult, ProviderUnavailableError } from "@/services/ai/providers/types";
 import { evaluateScanAlerts } from "@/services/alerts";
 import { computeScanMetrics, type MetricsRunInput } from "@/services/metrics/aggregate";
 import { generateRecommendations } from "@/services/recommendations/engine";
@@ -266,6 +267,27 @@ interface ScanContext {
   unavailable: Set<ProviderId>;
 }
 
+// 5. Store raw result
+async function storeRawResult(runId: string, result: ProviderResult) {
+  await db()
+    .update(aiRuns)
+    .set({
+      status: "completed",
+      model: result.model,
+      responseText: result.response,
+      citations: result.citations,
+      rawResponse: result.raw ?? null,
+      latencyMs: result.latencyMs,
+      inputTokens: result.usage.inputTokens,
+      outputTokens: result.usage.outputTokens,
+      estimatedCostUsd: result.estimatedCostUsd,
+      isMock: result.isMock,
+      error: null,
+      completedAt: new Date(),
+    })
+    .where(eq(aiRuns.id, runId));
+}
+
 async function processRun(run: AiRun, ctx: ScanContext) {
   const provider = run.provider as ProviderId;
   const { scan, project } = ctx;
@@ -285,36 +307,26 @@ async function processRun(run: AiRun, ctx: ScanContext) {
   const competitorContexts = toCompetitorContexts(ctx.competitors);
 
   try {
-    // 4. Execute provider query
-    const impl = getProvider(provider, scan.mode);
-    if (!impl.isConfigured()) throw new ProviderUnavailableError(provider, `${impl.displayName} is not configured.`);
-    logger.debug("scan.provider_call", { scanId: scan.id, provider, runId: run.id });
-    const result = await impl.runQuery({
-      query: run.queryText,
-      businessContext: business,
-      competitors: competitorContexts,
-      seed: scan.id,
-      mockStrength: scan.config.mockStrength,
-    });
-
-    // 5. Store raw result
-    await db()
-      .update(aiRuns)
-      .set({
-        status: "completed",
-        model: result.model,
-        responseText: result.response,
-        citations: result.citations,
-        rawResponse: result.raw ?? null,
-        latencyMs: result.latencyMs,
-        inputTokens: result.usage.inputTokens,
-        outputTokens: result.usage.outputTokens,
-        estimatedCostUsd: result.estimatedCostUsd,
-        isMock: result.isMock,
-        error: null,
-        completedAt: new Date(),
-      })
-      .where(eq(aiRuns.id, run.id));
+    let result: Pick<ProviderResult, "response" | "citations" | "isMock">;
+    if (run.responseText !== null) {
+      // An earlier attempt got an answer but failed while storing the analysis.
+      // Reuse it: never pay the provider twice for the same check.
+      result = { response: run.responseText, citations: run.citations ?? [], isMock: run.isMock };
+    } else {
+      // 4. Execute provider query
+      const impl = getProvider(provider, scan.mode);
+      if (!impl.isConfigured()) throw new ProviderUnavailableError(provider, `${impl.displayName} is not configured.`);
+      logger.debug("scan.provider_call", { scanId: scan.id, provider, runId: run.id });
+      const answer = await impl.runQuery({
+        query: run.queryText,
+        businessContext: business,
+        competitors: competitorContexts,
+        seed: scan.id,
+        mockStrength: scan.config.mockStrength,
+      });
+      result = answer;
+      await storeRawResult(run.id, answer);
+    }
 
     // 6. Analyze
     const analysis = await analyzeResponse(
@@ -330,13 +342,20 @@ async function processRun(run: AiRun, ctx: ScanContext) {
 
     // 7. Store analysis + sources
     await db().transaction(async (tx) => {
+      // Questions and competitors can be deleted while a scan runs: reference
+      // only rows that still exist (the FKs are ON DELETE SET NULL).
+      const liveCompetitorIds = new Set(
+        (await tx.select({ id: competitorsTable.id }).from(competitorsTable).where(eq(competitorsTable.projectId, project.id))).map(
+          (c) => c.id,
+        ),
+      );
       await tx
         .insert(aiAnalysis)
         .values({
           aiRunId: run.id,
           scanId: scan.id,
           projectId: project.id,
-          queryId: run.queryId,
+          queryId: sql`(select ${queriesTable.id} from ${queriesTable} where ${queriesTable.id} = ${run.queryId})`,
           provider,
           mentioned: a.mentioned,
           recommended: a.recommended,
@@ -364,7 +383,8 @@ async function processRun(run: AiRun, ctx: ScanContext) {
             domain: c.domain,
             title: c.title?.slice(0, 300) ?? null,
             isOwnDomain: domainMatches(c.domain, project.domain),
-            competitorId: ctx.competitors.find((comp) => domainMatches(c.domain, comp.domain))?.id ?? null,
+            competitorId:
+              ctx.competitors.find((comp) => liveCompetitorIds.has(comp.id) && domainMatches(c.domain, comp.domain))?.id ?? null,
           })),
         );
       }
@@ -434,6 +454,9 @@ export async function processScan(scanId: string, options: ProcessOptions = {}):
       .set({ status: "running", startedAt: new Date(), heartbeatAt: new Date() })
       .where(and(eq(scans.id, scanId), eq(scans.status, "queued")));
     logger.info("scan.started", { scanId, projectId: project.id, mode: scan.mode });
+  } else {
+    // Resuming: mark the scan as attended so other workers don't pick it up too.
+    await db().update(scans).set({ heartbeatAt: new Date() }).where(eq(scans.id, scanId));
   }
 
   const ctx: ScanContext = {
@@ -528,15 +551,37 @@ export async function loadMetricsInput(scan: Scan, project: AuthorizedProject) {
   };
 }
 
+/** A finalization claim older than this is considered abandoned (crashed worker). */
+const FINALIZE_CLAIM_MS = 5 * 60_000;
+
 export async function finalizeScan(scanId: string) {
-  // Only one worker finalizes.
+  // Only one worker finalizes. A claim left by a worker that died expires.
+  const expired = new Date(Date.now() - FINALIZE_CLAIM_MS);
   const claimed = await db()
     .update(scans)
     .set({ finalizingAt: new Date() })
-    .where(and(eq(scans.id, scanId), sql`${scans.finalizingAt} is null`))
+    .where(
+      and(
+        eq(scans.id, scanId),
+        inArray(scans.status, ["queued", "running"]),
+        or(isNull(scans.finalizingAt), lt(scans.finalizingAt, expired)),
+      ),
+    )
     .returning();
   const scan = claimed[0];
   if (!scan) return;
+
+  try {
+    await finalizeClaimedScan(scan);
+  } catch (error) {
+    // Release the claim so the next worker can retry right away.
+    await db().update(scans).set({ finalizingAt: null }).where(eq(scans.id, scanId));
+    throw error;
+  }
+}
+
+async function finalizeClaimedScan(scan: Scan) {
+  const scanId = scan.id;
 
   const project = await getProjectInternal(scan.projectId);
   if (!project) return;
@@ -709,13 +754,19 @@ export async function recalculateScan(scanId: string) {
 /** Scans that need a worker: queued, or running without a recent heartbeat. */
 export async function findScansNeedingWork(limit = 5) {
   const stale = new Date(Date.now() - 2 * 60_000);
+  const claimExpired = new Date(Date.now() - FINALIZE_CLAIM_MS);
   return db()
     .select({ id: scans.id })
     .from(scans)
     .where(
       or(
         eq(scans.status, "queued"),
-        and(eq(scans.status, "running"), or(lt(scans.heartbeatAt, stale), sql`${scans.heartbeatAt} is null`)),
+        and(
+          eq(scans.status, "running"),
+          or(lt(scans.heartbeatAt, stale), isNull(scans.heartbeatAt)),
+          // Being finalized by another worker (unless that claim expired).
+          or(isNull(scans.finalizingAt), lt(scans.finalizingAt, claimExpired)),
+        ),
       ),
     )
     .orderBy(asc(scans.createdAt))

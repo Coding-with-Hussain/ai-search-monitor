@@ -71,13 +71,16 @@ export async function enqueueDueScans(limit = 25): Promise<string[]> {
 export async function processPendingScans(deadlineMs = 50_000) {
   const deadline = Date.now() + deadlineMs;
   const processed: string[] = [];
+  const finished = new Set<string>();
   while (Date.now() < deadline - 2_000) {
-    const pending = await findScansNeedingWork(3);
+    // Never spin on a scan this invocation already finished with.
+    const pending = (await findScansNeedingWork(3 + finished.size)).filter(({ id }) => !finished.has(id)).slice(0, 3);
     if (pending.length === 0) break;
     for (const { id } of pending) {
       const remaining = deadline - Date.now();
       if (remaining < 3_000) break;
-      await processScan(id, { deadlineMs: remaining - 2_000 });
+      const { done } = await processScan(id, { deadlineMs: remaining - 2_000 });
+      if (done) finished.add(id);
       processed.push(id);
     }
   }

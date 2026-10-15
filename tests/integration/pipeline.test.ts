@@ -1,10 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { db } from "@/db";
 import { getProjectForUser } from "@/db/repositories/projects";
-import { aiAnalysis, aiRuns, notifications, projects, recommendations, scans, sources, usageRecords } from "@/db/schema";
-import { createScan, recalculateScan, runScanToCompletion } from "@/services/scans/pipeline";
+import { aiAnalysis, aiRuns, notifications, projects, queries, recommendations, scans, sources, usageRecords } from "@/db/schema";
+import { createScan, findScansNeedingWork, processScan, recalculateScan, runScanToCompletion } from "@/services/scans/pipeline";
 
 import { cleanupUsers, createTestProject, createTestUser, hasDatabase } from "./helpers";
 
@@ -111,6 +111,62 @@ describe.skipIf(!hasDatabase)("failed scheduled scans", () => {
     expect(after.nextScanAt!.getTime()).toBeGreaterThan(Date.now());
     const notes = await db().select().from(notifications).where(and(eq(notifications.userId, owner), eq(notifications.type, "scan_failed")));
     expect(notes).toHaveLength(1);
+  });
+});
+
+describe.skipIf(!hasDatabase)("scan recovery", () => {
+  afterAll(cleanupUsers);
+
+  it("reuses a stored answer instead of calling the provider again", async () => {
+    const owner = (await createTestUser("reuse")).id;
+    const project = await createTestProject(owner, {
+      monitoring: { generateQueries: true, frequency: "weekly", queryCount: 5, providers: ["chatgpt"] },
+    });
+    const scan = await createScan({ project, userId: owner, trigger: "manual" });
+    const [run] = await db().select().from(aiRuns).where(eq(aiRuns.scanId, scan.id)).limit(1);
+    // As if an earlier attempt stored the answer and then failed during analysis.
+    const stored = "1. **Test Dental Co** – Reused stored answer, highly rated.";
+    await db().update(aiRuns).set({ responseText: stored, citations: [], status: "pending", attempts: 1 }).where(eq(aiRuns.id, run.id));
+
+    await runScanToCompletion(scan.id);
+
+    const [after] = await db().select().from(aiRuns).where(eq(aiRuns.id, run.id));
+    expect(after.responseText).toBe(stored);
+    const [analysis] = await db().select().from(aiAnalysis).where(eq(aiAnalysis.aiRunId, run.id));
+    expect(analysis).toMatchObject({ mentioned: true, position: 1 });
+  });
+
+  it("keeps scanning when questions are deleted mid-scan", async () => {
+    const owner = (await createTestUser("delete-mid")).id;
+    const project = await createTestProject(owner, {
+      monitoring: { generateQueries: true, frequency: "weekly", queryCount: 6, providers: ["chatgpt", "gemini"] },
+    });
+    const scan = await createScan({ project, userId: owner, trigger: "manual" });
+    const [victim] = await db().select().from(aiRuns).where(and(eq(aiRuns.scanId, scan.id), isNotNull(aiRuns.queryId))).limit(1);
+    await db().delete(queries).where(eq(queries.id, victim.queryId!));
+
+    await runScanToCompletion(scan.id);
+    const [done] = await db().select().from(scans).where(eq(scans.id, scan.id));
+    expect(done).toMatchObject({ status: "completed", failedItems: 0 });
+  });
+
+  it("recovers a scan whose finalizing worker died", async () => {
+    const owner = (await createTestUser("stuck")).id;
+    const project = await createTestProject(owner, {
+      monitoring: { generateQueries: true, frequency: "weekly", queryCount: 5, providers: ["chatgpt"] },
+    });
+    const scan = await createScan({ project, userId: owner, trigger: "manual" });
+    await processScan(scan.id);
+    // Simulate a worker that claimed finalization and crashed before finishing.
+    const stuck = { status: "running" as const, completedAt: null, heartbeatAt: new Date(Date.now() - 10 * 60_000) };
+    await db().update(scans).set({ ...stuck, finalizingAt: new Date(Date.now() - 60_000) }).where(eq(scans.id, scan.id));
+    expect((await findScansNeedingWork(1000)).map((s) => s.id)).not.toContain(scan.id);
+
+    await db().update(scans).set({ ...stuck, finalizingAt: new Date(Date.now() - 10 * 60_000) }).where(eq(scans.id, scan.id));
+    expect((await findScansNeedingWork(1000)).map((s) => s.id)).toContain(scan.id);
+    await processScan(scan.id);
+    const [row] = await db().select().from(scans).where(eq(scans.id, scan.id));
+    expect(row.status).toBe("completed");
   });
 });
 
