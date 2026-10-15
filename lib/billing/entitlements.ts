@@ -52,10 +52,6 @@ function calendarMonth(now = new Date()) {
   return { start, end };
 }
 
-/**
- * Usage window: the Stripe billing period when one exists and is current,
- * otherwise the calendar month (UTC).
- */
 /** Add whole months in UTC, clamping to the last day of shorter months. */
 function addUtcMonths(date: Date, months: number) {
   const d = new Date(date.getTime());
@@ -67,8 +63,24 @@ function addUtcMonths(date: Date, months: number) {
   return d;
 }
 
-export function usagePeriod(sub: { currentPeriodStart: Date | null; currentPeriodEnd: Date | null } | null, now = new Date()) {
-  if (sub?.currentPeriodStart && sub.currentPeriodEnd && sub.currentPeriodEnd > now && sub.currentPeriodStart <= now) {
+/**
+ * Usage window: the paid Stripe billing period when one exists and is
+ * current, otherwise the calendar month (UTC). Trials (in-app or a short
+ * Stripe trial carried over at checkout) use the calendar month, so moving
+ * between them does not reset the allowance; it resets when paid billing
+ * starts.
+ */
+export function usagePeriod(
+  sub: { currentPeriodStart: Date | null; currentPeriodEnd: Date | null; status?: SubscriptionStatus } | null,
+  now = new Date(),
+) {
+  if (
+    sub?.status !== "trialing" &&
+    sub?.currentPeriodStart &&
+    sub.currentPeriodEnd &&
+    sub.currentPeriodEnd > now &&
+    sub.currentPeriodStart <= now
+  ) {
     const start = sub.currentPeriodStart;
     const lengthDays = (sub.currentPeriodEnd.getTime() - start.getTime()) / 86_400_000;
     if (lengthDays <= 32) return { start, end: sub.currentPeriodEnd };

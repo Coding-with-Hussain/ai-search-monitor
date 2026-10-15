@@ -78,6 +78,13 @@ describe("entitlements", () => {
     expect(stale.start.toISOString()).toBe("2026-10-01T00:00:00.000Z");
   });
 
+  it("keeps the calendar-month allowance during a Stripe trial", () => {
+    const trial = { currentPeriodStart: new Date("2026-10-10T00:00:00Z"), currentPeriodEnd: new Date("2026-10-15T18:00:00Z"), status: "trialing" as const };
+    expect(usagePeriod(trial, now).start.toISOString()).toBe("2026-10-01T00:00:00.000Z");
+    const paid = { currentPeriodStart: new Date("2026-10-15T18:00:00Z"), currentPeriodEnd: new Date("2026-11-15T18:00:00Z"), status: "active" as const };
+    expect(usagePeriod(paid, new Date("2026-10-16T00:00:00Z")).start.toISOString()).toBe("2026-10-15T18:00:00.000Z");
+  });
+
   it("gives annual subscribers a monthly allowance window, not one for the whole year", () => {
     const yearly = { currentPeriodStart: new Date("2026-03-31T10:00:00Z"), currentPeriodEnd: new Date("2027-03-31T10:00:00Z") };
     const p = usagePeriod(yearly, now); // now = 2026-10-15
