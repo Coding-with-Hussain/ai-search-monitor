@@ -276,7 +276,33 @@ function truncate(s: string, max = 280) {
 function isCited(entity: AnalyzerEntity, citations: Citation[], text: string) {
   if (!entity.domain) return false;
   if (citations.some((c) => domainMatches(c.domain, entity.domain))) return true;
-  return text.toLowerCase().includes(entity.domain.toLowerCase());
+  // The domain (or a subdomain of it) written in the answer, as a whole host:
+  // "notexample.com" and "example.com.au" are different sites.
+  const host = new RegExp(`(?<![\\p{L}\\p{N}-])${escapeRegExp(entity.domain)}(?![\\p{L}\\p{N}-]|\\.[\\p{L}\\p{N}])`, "iu");
+  return host.test(text);
+}
+
+type Span = Mention;
+
+/**
+ * Drop spans that sit inside a longer span of another entity, so "Bright Smile"
+ * is not credited for every "Bright Smile Orthodontics" mention.
+ */
+function withoutContained(own: Span[], others: Span[]): Span[] {
+  return own.filter(
+    (m) => !others.some((o) => o.length > m.length && o.index <= m.index && o.index + o.length >= m.index + m.length),
+  );
+}
+
+function resolveMentions(text: string, entities: Array<{ key: string; entity: AnalyzerEntity }>) {
+  const raw = new Map(entities.map(({ key, entity }) => [key, findMentions(text, entity)]));
+  const resolved = new Map<string, { mentions: Mention[]; viaAlias: boolean }>();
+  for (const [key, found] of raw) {
+    const others = [...raw].filter(([k]) => k !== key).flatMap(([, f]) => f.mentions);
+    const mentions = withoutContained(found.mentions, others);
+    resolved.set(key, { mentions, viaAlias: found.viaAlias && mentions.length > 0 });
+  }
+  return resolved;
 }
 
 interface Context {
@@ -292,8 +318,9 @@ function analyzeEntity(
   ctx: Context,
   citations: Citation[],
   firstMentionRank: Map<string, number>,
+  found: { mentions: Mention[]; viaAlias: boolean },
 ): EntityOutcome {
-  const { mentions, viaAlias } = findMentions(ctx.text, entity);
+  const { mentions, viaAlias } = found;
   const cited = isCited(entity, citations, ctx.text);
   if (mentions.length === 0) {
     return { mentioned: false, recommended: false, position: null, sentiment: null, cited, evidence: null, confidence: 0.85, viaAlias: false };
@@ -377,7 +404,12 @@ export function analyzeHeuristically(input: AnalyzeInput): AnalysisResult {
   const subjectItems: Context["subjectItems"] = [];
   const others: OtherBusiness[] = [];
   for (const item of items) {
-    const tracked = entities.find(({ entity }) => findMentions(item.lead, entity).mentions.length > 0);
+    // The most specific (longest) name in the lead decides whose item it is.
+    const inLead = resolveMentions(item.lead, entities);
+    const tracked = entities
+      .map((e) => ({ ...e, longest: Math.max(0, ...inLead.get(e.key)!.mentions.map((m) => m.length)) }))
+      .filter((e) => e.longest > 0)
+      .reduce<{ key: string; longest: number } | undefined>((best, e) => (!best || e.longest > best.longest ? e : best), undefined);
     if (tracked) {
       // A business listed twice keeps its first (best) position.
       if (!subjectItems.some((s) => s.subjectKey === tracked.key)) subjectItems.push({ item, subjectKey: tracked.key });
@@ -394,17 +426,18 @@ export function analyzeHeuristically(input: AnalyzeInput): AnalysisResult {
   });
 
   // First-appearance rank for prose answers without lists.
+  const mentionsByKey = resolveMentions(text, entities);
   const firstIndex = entities
-    .map(({ key, entity }) => ({ key, idx: findMentions(text, entity).mentions[0]?.index ?? -1 }))
+    .map(({ key }) => ({ key, idx: mentionsByKey.get(key)!.mentions[0]?.index ?? -1 }))
     .filter((e) => e.idx >= 0)
     .sort((a, b) => a.idx - b.idx);
   const firstMentionRank = new Map(firstIndex.map((e, i) => [e.key, i + 1]));
 
   const ctx: Context = { text, items, subjectItems };
-  const business = analyzeEntity("__business__", input.business, ctx, input.citations, firstMentionRank);
+  const business = analyzeEntity("__business__", input.business, ctx, input.citations, firstMentionRank, mentionsByKey.get("__business__")!);
 
   const competitors: AnalysisCompetitorResult[] = input.competitors.map((c) => {
-    const o = analyzeEntity(c.id, c, ctx, input.citations, firstMentionRank);
+    const o = analyzeEntity(c.id, c, ctx, input.citations, firstMentionRank, mentionsByKey.get(c.id)!);
     return {
       competitorId: c.id,
       name: c.name,

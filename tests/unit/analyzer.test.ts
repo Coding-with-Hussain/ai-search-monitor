@@ -105,4 +105,33 @@ describe("heuristic analyzer", () => {
     expect(r.otherBusinesses).toEqual([]);
     expect(r.position).toBe(1);
   });
+
+  it("credits a list item to the most specific name when names overlap", () => {
+    const r = analyzeHeuristically({
+      response: [
+        "Top orthodontists in Austin:",
+        "1. **Bright Smile Orthodontics** – Highly rated for clear aligners.",
+        "2. **Lone Star Braces** – Affordable payment plans.",
+      ].join("\n"),
+      citations: [],
+      business: { name: "Bright Smile", domain: "brightsmile.com" },
+      competitors: [
+        { id: "c1", name: "Bright Smile Orthodontics" },
+        { id: "c2", name: "Lone Star Braces" },
+      ],
+    });
+    expect(r.mentioned).toBe(false);
+    expect(r.position).toBeNull();
+    expect(r.competitors.find((c) => c.competitorId === "c1")).toMatchObject({ mentioned: true, recommended: true, position: 1 });
+  });
+
+  it("only treats the exact site (or a subdomain) written in the answer as a citation", () => {
+    const run = (response: string) =>
+      analyzeHeuristically({ response, citations: [], business: { name: "Smile Dental", domain: "smiledental.com" }, competitors: [] }).citation;
+    expect(run("Smile Dental is great. See notsmiledental.com for details.")).toBe(false);
+    expect(run("Smile Dental is great. See smiledental.com.au for details.")).toBe(false);
+    expect(run("Smile Dental is great. Book at smiledental.com.")).toBe(true);
+    expect(run("Smile Dental is great. Book at book.smiledental.com today.")).toBe(true);
+  });
 });
+

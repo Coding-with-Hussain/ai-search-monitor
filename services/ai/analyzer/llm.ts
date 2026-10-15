@@ -2,7 +2,7 @@ import { logger } from "@/lib/logger";
 
 import { postJson } from "../http";
 import { estimateCost } from "../pricing";
-import { type AnalyzeInput, findMentions } from "./heuristic";
+import type { AnalyzeInput } from "./heuristic";
 import { type AnalysisResult, analysisResultSchema, type LlmAnalysis, llmAnalysisSchema } from "./schema";
 
 /**
@@ -143,7 +143,9 @@ export function reconcile(llm: LlmAnalysis, heuristic: AnalysisResult, input: An
   const text = input.response;
   const lower = text.toLowerCase();
 
-  const presentStrict = findMentions(text, input.business).mentions.length > 0;
+  // The heuristic pass already resolved overlapping names (e.g. "Bright Smile"
+  // inside "Bright Smile Orthodontics"), so its mention flags are the strict check.
+  const presentStrict = heuristic.mentioned;
   const presentLoose = lower.includes(input.business.name.toLowerCase());
   let mentioned = llm.business.mentioned;
   let confidence = llm.confidence;
@@ -160,7 +162,7 @@ export function reconcile(llm: LlmAnalysis, heuristic: AnalysisResult, input: An
   const competitors = input.competitors.map((c) => {
     const h = heuristic.competitors.find((x) => x.competitorId === c.id)!;
     const l = llm.competitors.find((x) => x.name.trim().toLowerCase() === c.name.trim().toLowerCase());
-    const strict = findMentions(text, c).mentions.length > 0;
+    const strict = h.mentioned;
     const loose = lower.includes(c.name.toLowerCase());
     let cm = l ? l.mentioned : h.mentioned;
     if (cm && !strict && !loose) cm = false;
