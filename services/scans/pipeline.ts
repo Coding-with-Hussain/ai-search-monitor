@@ -134,7 +134,7 @@ export async function createScan(opts: CreateScanOptions): Promise<Scan> {
         throw validationError("Add or generate at least one active question before running a scan.");
       }
 
-      const providers = project.providers.filter((p): p is ProviderId => (PROVIDER_IDS as readonly string[]).includes(p));
+      const providers = [...new Set(project.providers)].filter((p): p is ProviderId => (PROVIDER_IDS as readonly string[]).includes(p));
       if (providers.length === 0) throw validationError("Enable at least one AI platform for this project.");
 
       const notes: string[] = [];
@@ -162,7 +162,8 @@ export async function createScan(opts: CreateScanOptions): Promise<Scan> {
       // Cost guard: hard cap on provider calls per scan.
       const maxCalls = env().MAX_PROVIDER_CALLS_PER_SCAN;
       if (activeQueries.length * providers.length > maxCalls) {
-        const allowed = Math.max(1, Math.floor(maxCalls / providers.length));
+        const allowed = Math.floor(maxCalls / providers.length);
+        if (allowed < 1) throw validationError("This scan exceeds the per-scan safety cap. Choose fewer AI platforms.");
         notes.push(`Limited to ${allowed} questions by the per-scan safety cap.`);
         activeQueries = activeQueries.slice(0, allowed);
       }

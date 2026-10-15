@@ -42,11 +42,18 @@ export const competitorInputSchema = z.object({
   website: websiteSchema,
 });
 
+/** Each platform at most once; duplicates would multiply paid calls per question. */
+export const providersSchema = z
+  .array(z.enum(PROVIDER_IDS))
+  .min(1, "Choose at least one AI platform")
+  .max(PROVIDER_IDS.length)
+  .transform((list) => [...new Set(list)]);
+
 export const monitoringSchema = z.object({
   generateQueries: z.boolean(),
   frequency: z.enum(MONITORING_FREQUENCIES),
   queryCount: z.number().int().min(5, "Monitor at least 5 questions").max(100, "Monitor at most 100 questions"),
-  providers: z.array(z.enum(PROVIDER_IDS)).min(1, "Choose at least one AI platform"),
+  providers: providersSchema,
 });
 
 export const createProjectSchema = businessInfoSchema
@@ -69,7 +76,7 @@ export const updateProjectSchema = businessInfoSchema.extend({
   aliases: z.array(trimmed(2, 120, "Alias")).max(10).default([]),
   monitoringFrequency: z.enum(MONITORING_FREQUENCIES),
   monitoringEnabled: z.boolean(),
-  providers: z.array(z.enum(PROVIDER_IDS)).min(1, "Choose at least one AI platform"),
+  providers: providersSchema,
 });
 
 export const addQuerySchema = z.object({
