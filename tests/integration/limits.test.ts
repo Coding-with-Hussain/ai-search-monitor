@@ -1,11 +1,12 @@
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { db } from "@/db";
 import { getProjectForUser } from "@/db/repositories/projects";
-import { usageRecords } from "@/db/schema";
+import { notifications, projects, usageRecords } from "@/db/schema";
 import { getUsageSummary } from "@/lib/billing/entitlements";
 import { addCompetitor } from "@/services/projects/service";
+import { enqueueDueScans } from "@/services/scheduler";
 import { createScan, runScanToCompletion } from "@/services/scans/pipeline";
 
 import { cleanupUsers, createTestProject, createTestUser, hasDatabase, setPlan } from "./helpers";
@@ -102,3 +103,33 @@ describe.skipIf(!hasDatabase)("plan enforcement under concurrency", () => {
     await expect(insertActive()).rejects.toThrow();
   });
 });
+
+describe.skipIf(!hasDatabase)("plan downgrades", () => {
+  afterAll(cleanupUsers);
+
+  it("moves daily monitoring to weekly and stops scanning projects beyond the plan", async () => {
+    const userId = (await createTestUser("downgrade")).id;
+    await setPlan(userId, "pro");
+    const daily = await createTestProject(userId, {
+      name: "Daily Biz",
+      monitoring: { generateQueries: true, frequency: "daily", queryCount: 5, providers: ["chatgpt"] },
+    });
+    const second = await createTestProject(userId, { name: "Second Biz" });
+    await setPlan(userId, "starter");
+
+    // Scheduler: the daily schedule is no longer included, so it becomes weekly.
+    await db().update(projects).set({ nextScanAt: new Date("2000-01-01T00:00:00Z") }).where(eq(projects.id, daily.id));
+    expect(await enqueueDueScans(1)).toEqual([]);
+    const [after] = await db().select().from(projects).where(eq(projects.id, daily.id));
+    expect(after.monitoringFrequency).toBe("weekly");
+    expect(after.nextScanAt!.getTime()).toBeGreaterThan(Date.now());
+    const notes = await db().select().from(notifications).where(and(eq(notifications.userId, userId), eq(notifications.type, "monitoring_schedule_changed")));
+    expect(notes).toHaveLength(1);
+
+    // Only the oldest project fits the Starter plan.
+    await expect(createScan({ project: second, userId, trigger: "manual" })).rejects.toMatchObject({ code: "PLAN_LIMIT" });
+    const ok = await createScan({ project: await getProjectForUser(userId, daily.id), userId, trigger: "manual" });
+    await runScanToCompletion(ok.id);
+  });
+});
+

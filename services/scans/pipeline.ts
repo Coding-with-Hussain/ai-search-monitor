@@ -144,6 +144,20 @@ export async function createScan(opts: CreateScanOptions): Promise<Scan> {
       if (!opts.skipEntitlements) {
         const { remaining, limit, used, ent } = await remainingQueries(project.userId, undefined, tx);
         assertActive(ent);
+        // After a downgrade, only the oldest projects within the plan keep
+        // scanning; the others stay readable but are not monitored.
+        const maxProjects = ent.plan.limits.projects;
+        const owned = await tx
+          .select({ id: projects.id })
+          .from(projects)
+          .where(eq(projects.userId, project.userId))
+          .orderBy(asc(projects.createdAt), asc(projects.id));
+        if (owned.findIndex((p) => p.id === project.id) >= maxProjects) {
+          throw planLimitError(
+            `Your ${ent.plan.name} plan includes ${maxProjects} project${maxProjects === 1 ? "" : "s"}. Upgrade, or delete another project, to keep monitoring ${project.name}.`,
+            { limit: "projects", used: owned.length, max: maxProjects, plan: ent.plan.id },
+          );
+        }
         if (remaining <= 0) {
           throw planLimitError(`You've used ${used}/${limit} queries this month. Upgrade your plan to keep monitoring.`, {
             limit: "queries",

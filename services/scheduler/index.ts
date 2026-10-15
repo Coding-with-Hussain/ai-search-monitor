@@ -5,6 +5,7 @@ import { type AuthorizedProject, computeNextScanAt } from "@/db/repositories/pro
 import { notifications, profiles, projects, recommendations, scans } from "@/db/schema";
 import { sendEmail } from "@/lib/email";
 import { weeklyReportEmail } from "@/lib/email/templates";
+import { getEntitlements } from "@/lib/billing/entitlements";
 import { appUrl } from "@/lib/env";
 import { isAppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
@@ -39,12 +40,37 @@ export async function enqueueDueScans(limit = 25): Promise<string[]> {
     .limit(limit);
 
   const created: string[] = [];
-  for (const p of due as AuthorizedProject[]) {
+  for (const due0 of due as AuthorizedProject[]) {
+    let p = due0;
     try {
+      // The plan may have changed since the schedule was set (e.g. a downgrade
+      // from Pro): fall back to the closest schedule the plan includes.
+      const allowed = (await getEntitlements(p.userId)).plan.limits.monitoringFrequencies;
+      if (!allowed.includes(p.monitoringFrequency)) {
+        const fallback = (["weekly", "monthly"] as const).find((f) => allowed.includes(f)) ?? "manual";
+        const nextScanAt = computeNextScanAt(fallback, p.lastScanAt ?? now);
+        await db()
+          .update(projects)
+          .set({ monitoringFrequency: fallback, monitoringEnabled: fallback !== "manual", nextScanAt })
+          .where(eq(projects.id, p.id));
+        await db().insert(notifications).values({
+          userId: p.userId,
+          projectId: p.id,
+          type: "monitoring_schedule_changed",
+          severity: "info",
+          title: `${p.name} now scans ${fallback}`,
+          body: `Your current plan includes ${fallback} monitoring, so the ${p.monitoringFrequency} schedule was changed. Upgrade to Pro to monitor daily again.`,
+        });
+        logger.info("scheduler.frequency_clamped", { projectId: p.id, from: p.monitoringFrequency, to: fallback });
+        if (!nextScanAt || nextScanAt > now) continue;
+        p = { ...p, monitoringFrequency: fallback };
+      }
+
       const scan = await createScan({ project: p, userId: p.userId, trigger: "scheduled" });
       created.push(scan.id);
     } catch (error) {
       const message = isAppError(error) ? error.message : (error as Error).message;
+      if (isAppError(error) && error.code === "CONFLICT") continue; // already running
       logger.warn("scheduler.scan_skipped", { projectId: p.id, error: message });
       // Push the schedule forward so we don't retry every tick, and tell the user.
       await db()
