@@ -89,3 +89,28 @@ describe.skipIf(!hasDatabase)("scan pipeline (integration)", () => {
     await runScanToCompletion(scan.id);
   });
 });
+
+describe.skipIf(!hasDatabase)("failed scheduled scans", () => {
+  afterAll(cleanupUsers);
+
+  it("are not charged, move the schedule forward and notify the owner", async () => {
+    const owner = (await createTestUser("sched-fail")).id;
+    const created = await createTestProject(owner);
+    await db().update(projects).set({ nextScanAt: new Date(Date.now() - 60_000) }).where(eq(projects.id, created.id));
+    const project = await getProjectForUser(owner, created.id);
+
+    // Live mode with no provider keys: every check is unavailable, so the scan fails.
+    const scan = await createScan({ project, userId: owner, trigger: "scheduled", mode: "live" });
+    await runScanToCompletion(scan.id);
+
+    const [row] = await db().select().from(scans).where(eq(scans.id, scan.id));
+    expect(row.status).toBe("failed");
+    const usage = await db().select().from(usageRecords).where(and(eq(usageRecords.scanId, scan.id), eq(usageRecords.kind, "query_run")));
+    expect(usage.reduce((sum, u) => sum + u.quantity, 0)).toBe(0);
+    const [after] = await db().select().from(projects).where(eq(projects.id, project.id));
+    expect(after.nextScanAt!.getTime()).toBeGreaterThan(Date.now());
+    const notes = await db().select().from(notifications).where(and(eq(notifications.userId, owner), eq(notifications.type, "scan_failed")));
+    expect(notes).toHaveLength(1);
+  });
+});
+

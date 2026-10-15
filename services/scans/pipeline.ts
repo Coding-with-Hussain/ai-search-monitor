@@ -13,6 +13,7 @@ import {
   aiAnalysis,
   aiRuns,
   type AiRun,
+  notifications,
   projects,
   queries as queriesTable,
   recommendations,
@@ -86,6 +87,22 @@ function isActiveScanConflict(error: unknown) {
   return pg?.code === "23505" && pg.constraint_name === "scans_one_active_per_project";
 }
 
+/**
+ * Usage is reserved when a scan is created and settled when it ends: only
+ * questions that got at least one answer count against the monthly quota, so
+ * failed or partly failed scans are not charged for checks that never ran.
+ */
+async function settleQueryUsage(executor: DbExecutor, scanId: string) {
+  const [row] = await executor
+    .select({ n: sql<number>`count(distinct ${aiRuns.queryText})::int` })
+    .from(aiRuns)
+    .where(and(eq(aiRuns.scanId, scanId), eq(aiRuns.status, "completed")));
+  await executor
+    .update(usageRecords)
+    .set({ quantity: Number(row?.n ?? 0) })
+    .where(and(eq(usageRecords.scanId, scanId), eq(usageRecords.kind, "query_run")));
+}
+
 export async function createScan(opts: CreateScanOptions): Promise<Scan> {
   const { project, userId, trigger } = opts;
   const log = { projectId: project.id, trigger };
@@ -103,6 +120,7 @@ export async function createScan(opts: CreateScanOptions): Promise<Scan> {
         const stale = active.heartbeatAt && Date.now() - active.heartbeatAt.getTime() > 30 * 60_000;
         if (!stale) throw conflict("A scan is already running for this project.");
         await tx.update(scans).set({ status: "failed", error: "Scan timed out." }).where(eq(scans.id, active.id));
+        await settleQueryUsage(tx, active.id);
       }
 
       // 2. Active queries, most important first.
@@ -180,6 +198,15 @@ export async function createScan(opts: CreateScanOptions): Promise<Scan> {
       );
       for (let i = 0; i < runRows.length; i += 500) {
         await tx.insert(aiRuns).values(runRows.slice(i, i + 500));
+      }
+
+      // A scheduled run moves the schedule forward right away, so a scan that
+      // later fails is not recreated on every scheduler tick.
+      if (trigger === "scheduled" && project.monitoringEnabled) {
+        await tx
+          .update(projects)
+          .set({ nextScanAt: computeNextScanAt(project.monitoringFrequency, createdAt) })
+          .where(eq(projects.id, project.id));
       }
 
       // Seeded demo history is not real usage and never counts against quotas.
@@ -442,10 +469,12 @@ export async function runScanToCompletion(scanId: string) {
     }
   } catch (error) {
     logger.error("scan.crashed", { scanId, error: (error as Error).message });
-    await db()
+    const failed = await db()
       .update(scans)
       .set({ status: "failed", error: "The scan stopped unexpectedly. Please retry." })
-      .where(and(eq(scans.id, scanId), inArray(scans.status, ["queued", "running"])));
+      .where(and(eq(scans.id, scanId), inArray(scans.status, ["queued", "running"])))
+      .returning({ id: scans.id });
+    if (failed.length) await settleQueryUsage(db(), scanId);
   }
 }
 
@@ -517,17 +546,31 @@ export async function finalizeScan(scanId: string) {
 
   if (metrics.runsSucceeded === 0) {
     const firstError = runs.find((r) => r.error)?.error ?? "No AI provider returned a result.";
-    await db()
-      .update(scans)
-      .set({
-        status: "failed",
-        error: `Your scan failed: ${firstError}`,
-        metrics,
-        completedAt: new Date(),
-        currentProvider: null,
-        currentQuery: null,
-      })
-      .where(eq(scans.id, scanId));
+    await db().transaction(async (tx) => {
+      await tx
+        .update(scans)
+        .set({
+          status: "failed",
+          error: `Your scan failed: ${firstError}`,
+          metrics,
+          completedAt: new Date(),
+          currentProvider: null,
+          currentQuery: null,
+        })
+        .where(eq(scans.id, scanId));
+      await settleQueryUsage(tx, scanId);
+      // Nobody is watching a scheduled scan; tell the owner it failed.
+      if (scan.trigger === "scheduled") {
+        await tx.insert(notifications).values({
+          userId: project.userId,
+          projectId: project.id,
+          type: "scan_failed",
+          severity: "warning",
+          title: `Scheduled scan failed for ${project.name}`,
+          body: "No AI platform returned an answer, so this scan was not counted against your monthly queries. We'll try again at the next scheduled time.",
+        });
+      }
+    });
     logger.error("scan.failed", { scanId, projectId: project.id, error: firstError });
     return;
   }
@@ -584,6 +627,7 @@ export async function finalizeScan(scanId: string) {
         error: metrics.runsFailed > 0 ? `${metrics.runsFailed} of ${metrics.runsTotal} checks could not be completed.` : null,
       })
       .where(eq(scans.id, scanId));
+    if (metrics.runsFailed > 0) await settleQueryUsage(tx, scanId);
 
     await tx
       .update(projects)
