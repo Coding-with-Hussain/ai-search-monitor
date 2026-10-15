@@ -57,7 +57,7 @@ export function SettingsNav() {
                   current
                     ? "bg-surface-muted text-foreground"
                     : "text-muted-foreground hover:bg-surface-muted/70 hover:text-foreground",
-                  id === "danger" && !current && "text-danger-text/80 hover:text-danger-text",
+                  id === "danger" && !current && "text-danger-text",
                 )}
               >
                 <Icon className="size-4 shrink-0" aria-hidden="true" />

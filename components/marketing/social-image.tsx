@@ -9,7 +9,7 @@ const COLORS = {
   surface: "#ffffff",
   foreground: "#141413",
   muted: "#5c5b56",
-  subtle: "#85847e",
+  subtle: "#6b6a64",
   border: "#e4e3dc",
   borderStrong: "#d2d1c9",
   primary: "#256abf",

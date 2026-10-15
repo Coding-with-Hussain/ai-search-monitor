@@ -16,7 +16,7 @@
   --surface-sunken: #ecece7;
   --foreground: #141413;
   --muted-foreground: #5c5b56;
-  --subtle-foreground: #85847e;
+  --subtle-foreground: #6b6a64;
   --border: #e4e3dc;
   --border-strong: #d2d1c9;
   --input: #d9d8d0;
@@ -36,6 +36,7 @@
   --warning-soft: #fdf4e1;
   --serious: #ec835a;
   --danger: #d03b3b;
+  --danger-foreground: #ffffff;
   --danger-text: #b42f2f;
   --danger-soft: #fbecec;
 
@@ -63,14 +64,15 @@
   --surface-sunken: #141413;
   --foreground: #f4f4f1;
   --muted-foreground: #b9b8ae;
-  --subtle-foreground: #8b8a83;
+  --subtle-foreground: #93928b;
   --border: #2b2b29;
   --border-strong: #3a3a37;
   --input: #3a3a37;
 
   --primary: #3987e5;
   --primary-hover: #5598e7;
-  --primary-foreground: #ffffff;
+  /* Dark text on the mid-blue fill: white would be 3.6:1 (below WCAG AA). */
+  --primary-foreground: #08111d;
   --primary-soft: #16263b;
   --primary-soft-foreground: #9ec5f4;
   --ring: #5598e7;
@@ -83,6 +85,7 @@
   --warning-soft: #2a2110;
   --serious: #ec835a;
   --danger: #e66767;
+  --danger-foreground: #1a0808;
   --danger-text: #f08a8a;
   --danger-soft: #2e1616;
 
@@ -126,6 +129,7 @@
   --color-warning-soft: var(--warning-soft);
   --color-serious: var(--serious);
   --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
   --color-danger-text: var(--danger-text);
   --color-danger-soft: var(--danger-soft);
   --color-series-1: var(--series-1);
