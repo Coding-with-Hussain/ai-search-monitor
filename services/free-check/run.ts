@@ -2,7 +2,6 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
-import { count, gte } from "drizzle-orm";
 import type { z } from "zod";
 
 import { db } from "@/db";
@@ -39,13 +38,28 @@ function dayKey(now = new Date()) {
   return now.toISOString().slice(0, 10);
 }
 
-export function hashIp(ip: string, now = new Date()) {
-  const salt = env().CRON_SECRET ?? "aivm-free-check";
-  return createHash("sha256").update(`free-check:${dayKey(now)}:${salt}:${ip}`).digest("hex");
+/**
+ * The unit a visitor is rate limited by: the IPv4 address, or the /64 prefix
+ * for IPv6 (one subscriber usually controls a whole /64, i.e. 2^64 addresses).
+ */
+export function clientKey(ip: string) {
+  const v = ip.trim().toLowerCase().replace(/%.*$/, "");
+  const mapped = v.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
+  if (mapped) return mapped[1];
+  if (!v.includes(":")) return v;
+  const [head, tail] = v.split("::");
+  const h = head ? head.split(":") : [];
+  const t = tail ? tail.split(":") : [];
+  const groups = tail === undefined ? h : [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t];
+  return `${groups
+    .slice(0, 4)
+    .map((g) => g.replace(/^0+(?=.)/, ""))
+    .join(":")}::/64`;
 }
 
-function startOfUtcDay(now = new Date()) {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+export function hashIp(ip: string, now = new Date()) {
+  const salt = env().CRON_SECRET ?? "aivm-free-check";
+  return createHash("sha256").update(`free-check:${dayKey(now)}:${salt}:${clientKey(ip)}`).digest("hex");
 }
 
 function pickProviders(): { mode: "live" | "mock"; providers: ProviderId[] } {
@@ -107,14 +121,14 @@ export async function runFreeCheck(input: Input, ip: string): Promise<{ id: stri
     "You've used today's free checks. Create a free account to monitor your AI visibility every week.",
   );
 
-  const [{ n }] = await db().select({ n: count() }).from(freeChecks).where(gte(freeChecks.createdAt, startOfUtcDay()));
-  if (Number(n) >= env().FREE_CHECK_DAILY_LIMIT) {
-    throw new AppError(
-      "RATE_LIMITED",
-      "The free checker is at capacity today. Please try again tomorrow — or start a free trial for full monitoring.",
-      429,
-    );
-  }
+  // Global daily budget, reserved atomically before any provider call so
+  // concurrent bursts cannot overspend it. Failed checks count too.
+  await enforceRateLimit(
+    `free-check:global:${dayKey()}`,
+    env().FREE_CHECK_DAILY_LIMIT,
+    86_400,
+    "The free checker is at capacity today. Please try again tomorrow — or start a free trial for full monitoring.",
+  );
 
   const website = normalizeWebsite(input.website);
   const business: BusinessContext = {
