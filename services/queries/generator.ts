@@ -127,7 +127,9 @@ export function normalizeQueryText(text: string): string {
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9\s]/g, " ")
+    // Keep letters, digits and in-word marks in every script (Urdu, Hindi,
+    // CJK, …), not just Latin. Latin accents were folded above.
+    .replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -142,7 +144,8 @@ function tokens(text: string) {
 export function similarity(a: string, b: string): number {
   const ta = tokens(a);
   const tb = tokens(b);
-  if (ta.size === 0 && tb.size === 0) return 1;
+  // Nothing meaningful to compare: only identical text counts as a duplicate.
+  if (ta.size === 0 || tb.size === 0) return normalizeQueryText(a) === normalizeQueryText(b) ? 1 : 0;
   let inter = 0;
   for (const t of ta) if (tb.has(t)) inter++;
   return inter / (ta.size + tb.size - inter);

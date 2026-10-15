@@ -79,4 +79,15 @@ describe("query generator", () => {
     expect(similarity("best dentist in Lahore", "best dentist in Lahore")).toBe(1);
     expect(similarity("Where can I get braces in Lahore?", "Where can I get dental implants in Lahore?")).toBeLessThan(0.85);
   });
+
+  it("keeps non-Latin questions distinct", () => {
+    const urdu = "لاہور میں بہترین ڈینٹسٹ کون ہے؟";
+    const urdu2 = "لاہور میں دانتوں کے امپلانٹ کہاں سے کروائیں؟";
+    expect(normalizeQueryText(urdu)).not.toBe("");
+    expect(normalizeQueryText(urdu)).not.toBe(normalizeQueryText(urdu2));
+    expect(isNearDuplicate(urdu2, [urdu])).toBe(false);
+    expect(isNearDuplicate(urdu, [urdu])).toBe(true);
+    expect(isNearDuplicate("東京で一番の歯医者は？", ["大阪で一番の歯医者は？"])).toBe(false);
+  });
 });
+
