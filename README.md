@@ -232,9 +232,14 @@ Browser ──► Next.js (App Router)
 
 Each `(question × provider)` pair is an `ai_runs` row. Workers claim pending rows with `FOR UPDATE SKIP LOCKED`, so processing is resumable, parallel‑safe and never blocks a browser request. The browser polls `GET /api/scans/:id` for progress (queued → running → completed / failed).
 
-**Authorization.** Every project read goes through `getProjectForUser(userId, projectId)`, which returns a branded `AuthorizedProject` type. Project‑scoped repository functions only accept that type, so a browser‑supplied id cannot be used without an ownership check (IDOR protection by construction). Row Level Security policies mirror these rules for any access through the Supabase Data API.
+**Authorization.** Every project read goes through `getProjectForUser(userId, projectId)`, which returns a branded `AuthorizedProject` type. Project‑scoped repository functions only accept that type, so a browser‑supplied id cannot be used without an ownership check (IDOR protection by construction). The app writes only from the server, so through the Supabase Data API signed‑in users can **read** their own rows (RLS) and write nothing; the anonymous role has no table access at all.
 
 **Entitlements.** `lib/billing/plans.ts` is the single source of truth for prices and limits; `lib/billing/entitlements.ts` enforces them on the server (projects, competitors per project, monthly queries, monitoring frequency, history, features).
+
+- Checks and the inserts they guard run in one transaction holding a per‑account advisory lock, so parallel requests cannot exceed a limit together; a unique index allows one active scan per project.
+- A "query" is one buyer question checked across the project's AI platforms. Usage is reserved when a scan starts and settled when it ends: questions that got no answer from any platform are not charged.
+- The allowance is monthly: the calendar month during trials, then the Stripe billing period (annual plans use month‑long windows anchored on the subscription start).
+- After a downgrade nothing is deleted. Schedules the plan no longer includes (daily) move to weekly with an in‑app notice, and only the oldest projects within the new project limit keep scanning; the rest stay readable.
 
 ## Database
 
@@ -277,7 +282,7 @@ Not mentioned = 0. Project, provider and competitor scores are averages of answe
 ## Background jobs & scheduling
 
 - **Default (no extra infrastructure):** a scan created from the UI is processed in‑process after the response with `after()`. `GET /api/cron/process-scans` resumes anything that stopped early (deploys, timeouts).
-- **Scheduled monitoring:** `GET /api/cron/scheduled-scans` creates scans for projects whose `next_scan_at` is due (daily/weekly/monthly) and starts processing; `GET /api/cron/weekly-reports` sends weekly emails. `vercel.json` schedules these with Vercel Cron; any scheduler can call them with `Authorization: Bearer $CRON_SECRET`.
+- **Scheduled monitoring:** `GET /api/cron/scheduled-scans` creates scans for projects whose `next_scan_at` is due (daily/weekly/monthly) and starts processing. A scheduled scan moves the schedule forward when it is created, so a failing scan is not retried every tick (the owner is notified instead). `GET /api/cron/weekly-reports` runs daily and emails each project's report at most once a week, resuming where it stopped and retrying failed sends. `vercel.json` schedules these with Vercel Cron; any scheduler can call them with `Authorization: Bearer $CRON_SECRET`.
 - **Vercel plan note:** the bundled `vercel.json` runs the scan worker every 5 minutes and the scheduler every 15 minutes, which needs Vercel Pro. On Hobby (daily crons only) change both schedules to once a day and rely on `after()` for user‑started scans, or use Inngest or an external scheduler (GitHub Actions, cron‑job.org) to call the endpoints more often.
 - **Inngest (optional):** set `INNGEST_EVENT_KEY`/`INNGEST_SIGNING_KEY` and scans are sent as `scan/requested` events to durable step functions (`lib/jobs/inngest.ts`, served at `/api/inngest`), with Inngest crons for scheduling and weekly reports.
 
@@ -287,19 +292,22 @@ Not mentioned = 0. Project, provider and competitor scores are averages of answe
 - Ownership checks on every project‑scoped read and write (branded `AuthorizedProject`), UUID validation for child ids, RLS as defense‑in‑depth.
 - Zod validation for all inputs; Drizzle parameterized queries (no string SQL from user input); provider output rendered as text (never as HTML).
 - Server Actions have built‑in CSRF protection; billing POST routes check the `Origin` header; Stripe webhooks verify signatures and are idempotent; cron routes require a bearer secret (constant‑time comparison).
-- Database‑backed rate limits on scans, query generation, reports, auth attempts and the free checker; per‑scan cost cap; free checker simulated by default and capped daily.
+- Database‑backed rate limits on scans, query generation, reports, auth attempts and the free checker; a hard per‑scan cost cap (each AI platform at most once per question); free checker simulated by default, with a daily budget reserved atomically and IPv6 visitors limited per /64.
 - Secrets are server‑only; logs redact sensitive keys; error messages shown to users never include internals.
 - Security headers (HSTS, frame denial, nosniff, referrer and permissions policies); private pages are `noindex` and excluded in `robots.txt`.
 
 ## Testing
 
 ```bash
-npm test                    # unit: scoring, analyzer (+LLM validation), generator, metrics,
-                            # recommendations, entitlements, alerts, simulator, domains
-npm run test:integration    # Postgres: full scan pipeline, user isolation, plan limits,
-                            # rate limiter, scheduler (needs DATABASE_URL)
-npm run test:e2e            # Playwright: signup → onboarding → scan → dashboard → recommendations → billing
+npm test                    # 97 unit tests: scoring, analyzer (+LLM validation), generator, metrics,
+                            # recommendations, entitlements, alerts, simulator, domains, schemas
+npm run test:integration    # 29 Postgres tests: scan pipeline and recovery, user isolation, RLS roles,
+                            # plan limits under concurrency, downgrades, scheduler, weekly reports
+npm run test:e2e            # 9 Playwright tests: signup → onboarding → scan → dashboard →
+                            # recommendations → billing, cross-user access, public site, mobile
 ```
+
+Integration tests blank all provider, Stripe and email keys, so they never make paid calls.
 
 CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit tests and a production build, plus integration tests against a Postgres service (using `tests/support/auth-stub.sql` in place of Supabase's `auth` schema).
 
@@ -328,6 +336,7 @@ CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit tests and a productio
 ### Known limitations
 
 - Agency workspaces (organizations, members, client access) are modeled in the database but not yet exposed in the UI.
+- After a downgrade, competitors above the new per‑project limit are kept and still analyzed; new ones cannot be added until the project is under the limit.
 - PDF export uses the browser's print‑to‑PDF on a print‑optimized report page (no server‑side PDF rendering yet).
 - Provider APIs do not expose user location; local questions include the city explicitly.
 - Scores reflect the monitored questions and providers at scan time; AI answers vary between runs.
